@@ -97,6 +97,44 @@ A Raspberry Pi-based clock with GPS time synchronization and weather display usi
    sudo reboot
    ```
 
+### Verify I2C Setup
+
+After enabling I2C and rebooting, verify the setup is working:
+
+1. **Check I2C Kernel Module**:
+   ```bash
+   lsmod | grep i2c
+   ```
+   You should see `i2c_dev` and `i2c_bcm2835` modules loaded.
+
+2. **Install I2C Tools** (if not already installed):
+   ```bash
+   sudo apt install i2c-tools
+   ```
+
+3. **Detect I2C Devices**:
+   ```bash
+   sudo i2cdetect -y 1
+   ```
+   You should see a device at address `70` (the default address for the 7-segment display). If you see `UU` instead of `70`, the device is in use by another process.
+
+4. **Check I2C Bus Status**:
+   ```bash
+   sudo i2cdetect -l
+   ```
+   Should show `i2c-1` bus available.
+
+5. **Test Display Communication**:
+   ```bash
+   python3 -c "
+   import board
+   import busio
+   i2c = busio.I2C(board.SCL, board.SDA)
+   print('I2C devices found:', [hex(addr) for addr in i2c.scan()])
+   "
+   ```
+   Should print `['0x70']` if the display is connected properly.
+
 ### Disable Bluetooth (Pi Zero 2 W)
 
 If using Raspberry Pi Zero 2 W, disable Bluetooth to free up UART:
@@ -320,6 +358,66 @@ sudo systemctl restart rpi-clock.service
 - **No Display**: Check I2C connections and enable I2C interface
 - **Wrong Characters**: Verify SDA/SCL connections
 - **Dim Display**: Check power connections
+
+#### I2C Display Troubleshooting
+
+If your display isn't working, follow these steps:
+
+1. **Verify I2C is Enabled**:
+   ```bash
+   # Check if I2C modules are loaded
+   lsmod | grep i2c
+   
+   # Check if I2C device exists
+   ls /dev/i2c*
+   ```
+
+2. **Check Physical Connections**:
+   - Ensure VCC (red) is connected to Pi pin 2 (5V)
+   - Ensure GND (black) is connected to Pi pin 6 (GND)
+   - Ensure SDA (yellow) is connected to Pi pin 3 (GPIO 2)
+   - Ensure SCL (white) is connected to Pi pin 5 (GPIO 3)
+
+3. **Test I2C Communication**:
+   ```bash
+   # Install i2c-tools if not already installed
+   sudo apt install i2c-tools
+   
+   # Scan for I2C devices
+   sudo i2cdetect -y 1
+   ```
+   Expected output should show `70` at the intersection of row 7, column 0.
+
+4. **Check for Address Conflicts**:
+   ```bash
+   # If you see UU instead of 70, the device is in use
+   sudo i2cdetect -y 1
+   ```
+   If you see `UU` at address 70, another process is using the display.
+
+5. **Test Python I2C Access**:
+   ```bash
+   python3 -c "
+   try:
+       import board
+       import busio
+       i2c = busio.I2C(board.SCL, board.SDA)
+       devices = i2c.scan()
+       print('I2C devices found:', [hex(addr) for addr in devices])
+       if 0x70 in devices:
+           print('Display found at address 0x70')
+       else:
+           print('Display NOT found - check connections')
+   except Exception as e:
+       print('I2C error:', e)
+   "
+   ```
+
+6. **Common Solutions**:
+   - **No devices found**: Check power and ground connections
+   - **Permission denied**: Add user to i2c group: `sudo usermod -a -G i2c $USER` then logout/login
+   - **Device busy**: Stop any running clock processes: `sudo systemctl stop rpi-clock.service`
+   - **Wrong address**: Some displays may use address 0x71 instead of 0x70
 
 ### Time Sync Issues
 
