@@ -78,6 +78,29 @@ A Raspberry Pi-based clock with GPS time synchronization and weather display usi
 
 ### Enable Required Interfaces
 
+#### Option 1: Automated Setup (Recommended)
+
+Use these commands to automatically enable I2C and configure the serial port:
+
+```bash
+# Enable I2C interface
+sudo raspi-config nonint do_i2c 0
+
+# Configure serial port (disable login shell, enable hardware)
+sudo raspi-config nonint do_serial 1
+
+# Install I2C tools
+sudo apt install -y i2c-tools
+
+# Add user to i2c group (no need to logout/login)
+sudo usermod -a -G i2c $USER
+
+# Reboot to apply changes
+sudo reboot
+```
+
+#### Option 2: Manual Configuration
+
 1. **Open Raspberry Pi Configuration**:
    ```bash
    sudo raspi-config
@@ -96,6 +119,26 @@ A Raspberry Pi-based clock with GPS time synchronization and weather display usi
    ```bash
    sudo reboot
    ```
+
+#### Option 3: Direct File Editing
+
+You can also manually edit the configuration files:
+
+```bash
+# Enable I2C by adding to /boot/config.txt
+echo "dtparam=i2c_arm=on" | sudo tee -a /boot/config.txt
+
+# Disable serial console login and enable hardware
+sudo sed -i 's/console=serial0,115200//' /boot/cmdline.txt
+echo "enable_uart=1" | sudo tee -a /boot/config.txt
+
+# Install I2C tools and add user to group
+sudo apt install -y i2c-tools
+sudo usermod -a -G i2c $USER
+
+# Reboot
+sudo reboot
+```
 
 ### Verify I2C Setup
 
