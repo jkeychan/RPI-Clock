@@ -54,10 +54,11 @@ sudo apt update
 
 echo ""
 echo "Step 2: Installing Python dependencies..."
-sudo apt install -y python3-pip python3-dev python3-venv
+sudo apt install -y python3-pip python3-dev python3-venv python3-full
 
-# Install Python packages
-pip3 install adafruit-circuitpython-ht16k33 requests configparser ntplib
+# Install Python packages using pip with --break-system-packages flag
+# This is needed for newer Debian/Ubuntu systems with externally managed environments
+pip3 install --break-system-packages adafruit-circuitpython-ht16k33 requests configparser ntplib
 
 echo ""
 echo "Step 3: Installing GPS daemon and clients..."

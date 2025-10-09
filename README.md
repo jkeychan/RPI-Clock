@@ -128,8 +128,13 @@ If using Raspberry Pi Zero 2 W, disable Bluetooth to free up UART:
 # Update package list
 sudo apt update
 
-# Install Python packages
-pip3 install adafruit-circuitpython-ht16k33 requests configparser ntplib
+# Install Python packages (for newer Debian/Ubuntu systems)
+pip3 install --break-system-packages adafruit-circuitpython-ht16k33 requests configparser ntplib
+
+# Alternative: Use virtual environment (recommended for development)
+# python3 -m venv venv
+# source venv/bin/activate
+# pip install adafruit-circuitpython-ht16k33 requests configparser ntplib
 
 # Install GPS daemon and clients
 sudo apt install gpsd gpsd-clients
@@ -137,6 +142,8 @@ sudo apt install gpsd gpsd-clients
 # Install time synchronization software
 sudo apt install chrony
 ```
+
+**Note**: On newer Debian/Ubuntu systems, you may encounter an "externally managed environment" error. The setup script handles this automatically with the `--break-system-packages` flag, or you can use a virtual environment for development.
 
 ### Configure GPS Daemon (gpsd)
 
