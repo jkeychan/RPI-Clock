@@ -100,12 +100,8 @@ echo "Step 6: Configuring chrony for GPS time synchronization..."
 # Backup original chrony.conf
 sudo cp /etc/chrony/chrony.conf /etc/chrony/chrony.conf.backup
 
-# Add GPS reference to chrony.conf
-if ! grep -q "refclock SHM 0" /etc/chrony/chrony.conf; then
-    echo "" | sudo tee -a /etc/chrony/chrony.conf
-    echo "# GPS reference clock" | sudo tee -a /etc/chrony/chrony.conf
-    echo "refclock SHM 0 offset 0.5 delay 0.2 refid NMEA" | sudo tee -a /etc/chrony/chrony.conf
-fi
+# Install optimized chrony configuration
+sudo cp chrony.conf /etc/chrony/chrony.conf
 
 # Restart chrony
 sudo systemctl restart chrony

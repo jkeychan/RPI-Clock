@@ -166,19 +166,21 @@ sudo apt install chrony
 
 ### Option 1: Chrony (Recommended)
 
-Chrony provides faster synchronization and better performance:
+Chrony provides faster synchronization and better performance. The setup script automatically installs an optimized configuration that:
 
+- Uses GPS as primary time source
+- Serves time to all networks (public time server)
+- Includes upstream NTP servers for backup
+- Optimized for Raspberry Pi performance
+
+**Manual Configuration** (if needed):
 1. **Configure Chrony**:
    ```bash
    sudo nano /etc/chrony/chrony.conf
    ```
 
-2. **Add GPS Reference**:
-   Add these lines at the end of the file:
-   ```
-   # GPS reference clock
-   refclock SHM 0 offset 0.5 delay 0.2 refid NMEA
-   ```
+2. **Use Provided Configuration**:
+   The setup script installs `chrony.conf` with optimized settings for GPS time serving.
 
 3. **Restart Chrony**:
    ```bash
@@ -190,6 +192,27 @@ Chrony provides faster synchronization and better performance:
    chronyc sources
    ```
    Look for GPS source marked with asterisk (*).
+
+**Public Time Server Features**:
+- Serves time to all networks (`allow 0.0.0.0/0`)
+- GPS + PPS reference clocks for maximum accuracy
+- Upstream NTP servers for backup synchronization
+- Optimized polling intervals for GPS sources
+
+**Verify Public Time Serving**:
+```bash
+# Check chrony sources
+chronyc sources
+
+# Check chrony tracking
+chronyc tracking
+
+# Test from another machine
+ntpdate -q your.pi.ip.address
+
+# Check if port 123 is open
+netstat -ulnp | grep :123
+```
 
 ### Option 2: Traditional NTP
 
