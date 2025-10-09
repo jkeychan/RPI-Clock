@@ -37,11 +37,19 @@ HUMIDITY_DISPLAY = config.getint('Cycle', 'humidity_display')
 
 # Pre-compute conversion factor
 C_TO_F_FACTOR = 9/5  # Avoid repeated division
+SMOOTH_SCROLL = True  # Enable stock-ticker style scrolling for metrics
+SCROLL_DELAY = 0.12   # Seconds per marquee step for smooth feel
 
 # Global variables
 cached_weather_info = None
 display = None
 ntp_client = None  # Reuse NTP client
+SESSION = None  # Reusable HTTP session
+WEATHER_PARAMS = None  # Prebuilt OpenWeather params
+
+# Display write cache
+last_display_text = None
+last_time_minute = None
 
 
 def signal_handler(sig, frame):
@@ -75,9 +83,41 @@ def initialize_ntp():
         return False
 
 
+def initialize_http_session():
+    """Initialize a reusable HTTP session and prebuild request params."""
+    global SESSION, WEATHER_PARAMS
+    try:
+        SESSION = requests.Session()
+        WEATHER_PARAMS = {"zip": ZIP_CODE, "appid": API_KEY, "units": "metric"}
+        return True
+    except Exception as e:
+        print(f"HTTP session initialization failed: {e}")
+        SESSION = None
+        WEATHER_PARAMS = None
+        return False
+
+
 def celsius_to_fahrenheit(celsius):
     """Convert Celsius temperature to Fahrenheit - optimized."""
     return (celsius * C_TO_F_FACTOR) + 32
+
+
+def write_display(text):
+    """Write text to display only if it changed."""
+    global last_display_text
+    if not display:
+        return
+    if text != last_display_text:
+        display.print(text)
+        display.show()
+        last_display_text = text
+
+
+def build_temp_string(temp, unit):
+    """Create temperature string without truncation for scrolling."""
+    if temp < 0:
+        return f"-{int(abs(temp))}{unit}"
+    return f"{int(temp)}{unit}"
 
 
 def display_temperature(temp, unit):
@@ -92,7 +132,7 @@ def display_temperature(temp, unit):
         temp_str = f"{int(temp)}{unit}"
 
     # Truncate and pad in one operation
-    display.print(temp_str[:4].rjust(4))
+    write_display(temp_str[:4].rjust(4))
 
 
 def display_time():
@@ -107,7 +147,7 @@ def display_time():
     minute = now.tm_min
 
     # Use format string for better performance
-    display.print(f"{hour:2d}{minute:02d}")
+    write_display(f"{hour:2d}{minute:02d}")
 
 
 def display_humidity(humidity):
@@ -115,7 +155,24 @@ def display_humidity(humidity):
     if not display:
         return
 
-    display.print(f"rH{int(round(humidity)):02d}")
+    # Show percentage in static mode (omit label to fit 4 chars)
+    write_display(f"{int(round(humidity)):02d}%".rjust(4))
+
+
+def scroll_combined_label_value(label, value_text, delay=SCROLL_DELAY):
+    """Scroll a combined label and value across the display.
+
+    Example: label='Out', value_text='72F' => 'Out 72F   ' scrolls once.
+    """
+    if not display:
+        return
+    # Compose with padding at end to allow scroll-off
+    full_text = f"{label} {value_text}   "
+    display.fill(0)
+    display.marquee(full_text, delay=delay, loop=False)
+    # Invalidate cache since marquee wrote directly to display
+    global last_display_text
+    last_display_text = None
 
 
 def fetch_weather():
@@ -123,12 +180,16 @@ def fetch_weather():
     max_retries = 3
     retry_delay = 5
 
-    # Pre-build params dict
-    params = {"zip": ZIP_CODE, "appid": API_KEY, "units": "metric"}
+    # Use prebuilt params and session
+    params = WEATHER_PARAMS
 
     for attempt in range(max_retries):
         try:
-            response = requests.get(api_endpoint, params=params, timeout=10)
+            if SESSION is None:
+                response = requests.get(
+                    api_endpoint, params=params, timeout=10)
+            else:
+                response = SESSION.get(api_endpoint, params=params, timeout=10)
             response.raise_for_status()
             weather_data = response.json()
 
@@ -172,8 +233,11 @@ def display_metric_with_message(message, display_function, *args, delay=2):
     display.fill(0)
     display.marquee(message, delay=0.2, loop=False)
     time.sleep(delay)
+    # Marquee changed the display buffer; invalidate cache so next write isn't skipped
+    global last_display_text
+    last_display_text = None
     display_function(*args)
-    display.show()
+    # display.show() occurs within write_display when content changes
 
 
 def main_loop():
@@ -182,18 +246,36 @@ def main_loop():
 
     while True:
         try:
-            # Time display loop - optimized
-            for _ in range(TIME_DISPLAY):
+            # Time display loop - optimized with monotonic tick and cached redraws
+            total_seconds = TIME_DISPLAY * 2  # preserve original semantics
+            if display:
+                # Initial render and minute cache
+                now_struct = time.localtime()
+                global last_time_minute
+                last_time_minute = now_struct.tm_min
                 display_time()
-                if display:
-                    display.colon = True
+
+                seconds_elapsed = 0
+                colon_on = False
+                next_tick = time.monotonic()
+                while seconds_elapsed < total_seconds:
+                    colon_on = not colon_on
+                    display.colon = colon_on
                     display.show()
-                    time.sleep(1)
-                    display.colon = False
-                    display.show()
-                    time.sleep(1)
-                else:
-                    time.sleep(2)  # Skip display operations if no hardware
+
+                    # Update time at minute change without redrawing otherwise
+                    now_struct = time.localtime()
+                    if now_struct.tm_min != last_time_minute:
+                        last_time_minute = now_struct.tm_min
+                        display_time()
+
+                    next_tick += 1.0
+                    sleep_duration = next_tick - time.monotonic()
+                    if sleep_duration > 0:
+                        time.sleep(sleep_duration)
+                    seconds_elapsed += 1
+            else:
+                time.sleep(total_seconds)
 
             # Weather display - only fetch when needed
             if cycle_counter == 0 or cached_weather_info is None:
@@ -202,15 +284,24 @@ def main_loop():
             if cached_weather_info:
                 temperature, feels_like, humidity = cached_weather_info
 
-                # Display weather metrics
-                display_metric_with_message(
-                    'Out', display_temperature, temperature, TEMP_UNIT)
-                time.sleep(TEMP_DISPLAY)
-                display_metric_with_message(
-                    'feel', display_temperature, feels_like, TEMP_UNIT)
-                time.sleep(FEELS_LIKE_DISPLAY)
-                display_humidity(humidity)
-                time.sleep(HUMIDITY_DISPLAY)
+                if SMOOTH_SCROLL:
+                    # Scroll label + value together for a ticker feel
+                    scroll_combined_label_value(
+                        'Out', build_temp_string(temperature, TEMP_UNIT))
+                    scroll_combined_label_value(
+                        'FEEL', build_temp_string(feels_like, TEMP_UNIT))
+                    scroll_combined_label_value(
+                        'rH', f"{int(round(humidity)):02d}%")
+                else:
+                    # Original stepwise messaging
+                    display_metric_with_message(
+                        'Out', display_temperature, temperature, TEMP_UNIT)
+                    time.sleep(TEMP_DISPLAY)
+                    display_metric_with_message(
+                        'feel', display_temperature, feels_like, TEMP_UNIT)
+                    time.sleep(FEELS_LIKE_DISPLAY)
+                    display_humidity(humidity)
+                    time.sleep(HUMIDITY_DISPLAY)
 
             cycle_counter = (cycle_counter + 1) % API_REFRESH_CYCLES
 
@@ -227,6 +318,7 @@ if __name__ == "__main__":
     # Initialize components
     initialize_display()
     initialize_ntp()
+    initialize_http_session()
 
     print("Starting Raspberry Pi Clock...")
     main_loop()
