@@ -48,24 +48,48 @@ if ! prompt_yes_no "Do you want to continue?"; then
     exit 0
 fi
 
+# Function to check if package is installed
+package_installed() {
+    dpkg -l "$1" 2>/dev/null | grep -q "^ii"
+}
+
 echo ""
-echo "Step 1: Updating package lists..."
-sudo apt update
+echo "Step 1: Checking and updating package lists..."
+if ! package_installed apt; then
+    sudo apt update
+else
+    echo "Package lists already up to date"
+fi
 
 echo ""
 echo "Step 2: Installing Python dependencies..."
-sudo apt install -y python3-pip
+if ! package_installed python3-pip; then
+    sudo apt install -y python3-pip
+else
+    echo "python3-pip already installed"
+fi
 
-# Install only the required Python packages
-pip3 install --break-system-packages adafruit-circuitpython-ht16k33 requests ntplib
+# Check and install Python packages
+echo "Checking Python packages..."
+python3 -c "import adafruit_ht16k33" 2>/dev/null || pip3 install --break-system-packages adafruit-circuitpython-ht16k33
+python3 -c "import requests" 2>/dev/null || pip3 install --break-system-packages requests
+python3 -c "import ntplib" 2>/dev/null || pip3 install --break-system-packages ntplib
 
 echo ""
 echo "Step 3: Installing GPS daemon and clients..."
-sudo apt install -y gpsd gpsd-clients
+if ! package_installed gpsd; then
+    sudo apt install -y gpsd gpsd-clients
+else
+    echo "gpsd already installed"
+fi
 
 echo ""
 echo "Step 4: Installing time synchronization software..."
-sudo apt install -y chrony
+if ! package_installed chrony; then
+    sudo apt install -y chrony
+else
+    echo "chrony already installed"
+fi
 
 echo ""
 echo "Step 5: Configuring GPS daemon..."
