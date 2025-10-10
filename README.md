@@ -24,7 +24,7 @@ A Raspberry Pi-based clock with GPS time synchronization and weather display usi
 - **GPIO Stacking Header for Pi A+/B+/Pi 2/Pi 3** - Extra-long 2x20 Pins
 - **CR1220 Coin Cell Battery** (for GPS HAT RTC backup)
 - **JST 2.0mm 4-Pin Connector Set** - 10pcs with Mini Female and Male Plugs
-- **Female-to-Female Dupont Jumper Wires** (4 wires minimum)
+- **Female-to-Female Dupont Jumper Wires** (5 wires minimum: VIN, IO, GND, SDA, SCL)
 - **Dupont Crimping Tool** (for professional connections)
 - **SMA to uFL/u.FL/IPX/IPEX RF Adapter Cable** (optional, for external antenna)
 - **External GPS Antenna with SMA connector** (optional, improves indoor reception)
@@ -57,13 +57,15 @@ A Raspberry Pi-based clock with GPS time synchronization and weather display usi
 1. **Add Pins to Display**: Solder the 5 pin headers that came with the display to the back with the longer ends pointing towards the back.
 
 2. **Connect Female Dupont Connectors to Display**: Connect the female Dupont wires to the 7-segment display backpack:
-   - **Red** → **VCC** (+)
-   - **Black** → **GND** (-)
-   - **Yellow** → **SDA** (D)
-   - **White** → **SCL** (C)
+   - **Red** → **VIN** (5V power)
+   - **Orange** → **IO** (3.3V logic)
+   - **Black** → **GND** (ground)
+   - **Yellow** → **SDA** (data)
+   - **White** → **SCL** (clock)
 
 3. **Connect to Pi**: Plug the Dupont connectors to the stacking header pins:
-   - **VCC** → **Pi 5V** pin 2
+   - **VIN** → **Pi 5V** pin 2
+   - **IO** → **Pi 3.3V** pin 1
    - **GND** → **Pi GND** pin 6
    - **SDA** → **Pi SDA** (GPIO 2) pin 3
    - **SCL** → **Pi SCL** (GPIO 3) pin 5
@@ -416,7 +418,8 @@ If your display isn't working, follow these steps:
    ```
 
 2. **Check Physical Connections**:
-   - Ensure VCC (red) is connected to Pi pin 2 (5V)
+   - Ensure VIN (red) is connected to Pi pin 2 (5V)
+   - Ensure IO (orange) is connected to Pi pin 1 (3.3V) - **REQUIRED**
    - Ensure GND (black) is connected to Pi pin 6 (GND)
    - Ensure SDA (yellow) is connected to Pi pin 3 (GPIO 2)
    - Ensure SCL (white) is connected to Pi pin 5 (GPIO 3)
@@ -457,10 +460,11 @@ If your display isn't working, follow these steps:
    ```
 
 6. **Common Solutions**:
-   - **No devices found**: Check power and ground connections
+   - **No devices found**: Check power and ground connections, ensure both 5V (VIN) and 3.3V (IO) are connected
    - **Permission denied**: Add user to i2c group: `sudo usermod -a -G i2c $USER` then logout/login
    - **Device busy**: Stop any running clock processes: `sudo systemctl stop rpi-clock.service`
    - **Wrong address**: Some displays may use address 0x71 instead of 0x70
+   - **Missing 3.3V**: The display requires both 5V (VIN) and 3.3V (IO) connections to function
 
 ### Time Sync Issues
 

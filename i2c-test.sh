@@ -98,7 +98,8 @@ try:
         else:
             print('✗ Display NOT found at address 0x70')
             print('  Check your wiring:')
-            print('  - VCC (red) → Pi pin 2 (5V)')
+            print('  - VIN (red) → Pi pin 2 (5V)')
+            print('  - IO (orange) → Pi pin 1 (3.3V) - REQUIRED')
             print('  - GND (black) → Pi pin 6 (GND)')
             print('  - SDA (yellow) → Pi pin 3 (GPIO 2)')
             print('  - SCL (white) → Pi pin 5 (GPIO 3)')
@@ -163,7 +164,7 @@ except Exception as e:
     print(f'✗ Display test failed: {e}')
     print('')
     print('Troubleshooting steps:')
-    print('1. Check physical connections')
+    print('1. Check physical connections - ensure both 5V (VIN) and 3.3V (IO) are connected')
     print('2. Verify I2C is enabled: sudo raspi-config nonint do_i2c 0')
     print('3. Reboot after enabling I2C')
     print('4. Check user permissions: sudo usermod -a -G i2c $USER')
