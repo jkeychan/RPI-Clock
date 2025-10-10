@@ -170,6 +170,10 @@ sudo chown -R root:root /opt/rpi-clock
 sudo chmod 755 /opt/rpi-clock
 sudo chmod 644 /opt/rpi-clock/*
 
+# Make config.ini editable by the user who ran the setup
+sudo chown root:$USER /opt/rpi-clock/config.ini
+sudo chmod 664 /opt/rpi-clock/config.ini
+
 echo ""
 echo "Step 9: Creating systemd service for RPI-Clock..."
 
