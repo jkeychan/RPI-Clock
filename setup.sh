@@ -173,10 +173,7 @@ sudo chmod 644 /opt/rpi-clock/*
 echo ""
 echo "Step 9: Creating systemd service for RPI-Clock..."
 
-# Get current user for service
-USER_NAME=$(whoami)
-
-# Create systemd service file
+# Create systemd service file (run as root for GPIO access)
 sudo tee /etc/systemd/system/rpi-clock.service > /dev/null <<EOF
 [Unit]
 Description=RPI Clock
@@ -184,7 +181,7 @@ After=network.target gpsd.service
 
 [Service]
 Type=simple
-User=$USER_NAME
+User=root
 WorkingDirectory=/opt/rpi-clock
 ExecStart=/usr/bin/python3 /opt/rpi-clock/clock.py
 Restart=always
