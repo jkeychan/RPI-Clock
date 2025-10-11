@@ -69,12 +69,19 @@ else
     echo "python3-pip already installed"
 fi
 
-# Check and install Python packages
+# Check and install Python packages (for both user and root)
 echo "Checking Python packages..."
 python3 -c "import board" 2>/dev/null || pip3 install --break-system-packages adafruit-blinka
 python3 -c "import adafruit_ht16k33" 2>/dev/null || pip3 install --break-system-packages adafruit-circuitpython-ht16k33
 python3 -c "import requests" 2>/dev/null || pip3 install --break-system-packages requests
 python3 -c "import ntplib" 2>/dev/null || pip3 install --break-system-packages ntplib
+
+# Also install for root (needed for systemd service)
+echo "Installing Python packages for root user..."
+sudo python3 -c "import board" 2>/dev/null || sudo pip3 install --break-system-packages adafruit-blinka
+sudo python3 -c "import adafruit_ht16k33" 2>/dev/null || sudo pip3 install --break-system-packages adafruit-circuitpython-ht16k33
+sudo python3 -c "import requests" 2>/dev/null || sudo pip3 install --break-system-packages requests
+sudo python3 -c "import ntplib" 2>/dev/null || sudo pip3 install --break-system-packages ntplib
 
 echo ""
 echo "Step 3: Installing GPS daemon and clients..."
