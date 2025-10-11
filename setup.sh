@@ -71,6 +71,7 @@ fi
 
 # Check and install Python packages
 echo "Checking Python packages..."
+python3 -c "import board" 2>/dev/null || pip3 install --break-system-packages adafruit-blinka
 python3 -c "import adafruit_ht16k33" 2>/dev/null || pip3 install --break-system-packages adafruit-circuitpython-ht16k33
 python3 -c "import requests" 2>/dev/null || pip3 install --break-system-packages requests
 python3 -c "import ntplib" 2>/dev/null || pip3 install --break-system-packages ntplib
