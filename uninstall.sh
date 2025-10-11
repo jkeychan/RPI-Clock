@@ -12,7 +12,7 @@ echo ""
 # Function to prompt for user input
 prompt_yes_no() {
     while true; do
-        read -p "$1 (y/n): " yn
+        read -r -p "$1 (y/n): " yn
         case $yn in
             [Yy]* ) return 0;;
             [Nn]* ) return 1;;

@@ -121,7 +121,7 @@ echo "Step 7: Checking for running clock processes..."
 echo "----------------------------------------------"
 if pgrep -f "clock.py" >/dev/null; then
     echo "✓ Clock process is running:"
-    ps -eaf | grep clock.py | grep -v grep
+    pgrep -af clock.py
     echo ""
     echo "To stop the clock process:"
     echo "sudo systemctl stop rpi-clock.service"

@@ -1,3 +1,10 @@
+"""RPI-Clock: GPS-synchronized timekeeper with weather display.
+
+This module provides a Raspberry Pi-based clock that synchronizes time via GPS
+and displays current time, temperature, feels-like temperature, and humidity
+on a 7-segment LED display.
+"""
+
 import ntplib
 import configparser
 import requests
@@ -8,6 +15,7 @@ import os
 import sys
 import time
 import signal
+from typing import Optional, Tuple, Dict, Any
 
 # Change to /tmp directory to avoid GPIO permission issues
 # The lgpio library tries to create notification files in the current working directory
@@ -16,100 +24,229 @@ os.chdir('/tmp')
 
 
 # Constants - avoid repeated lookups
-API_REFRESH_CYCLES = 10
-api_endpoint = "https://api.openweathermap.org/data/2.5/weather"
-CONFIG_FILE = '/opt/rpi-clock/config.ini'
+API_REFRESH_CYCLES: int = 10
+API_ENDPOINT: str = "https://api.openweathermap.org/data/2.5/weather"
+CONFIG_FILE: str = '/opt/rpi-clock/config.ini'
 
 # Pre-compile regex patterns and cache config values
-config = configparser.ConfigParser()
+config: configparser.ConfigParser = configparser.ConfigParser()
 config.read_dict({
     'Weather': {'API_KEY': 'your_api_key_here', 'ZIP_CODE': 'your_zip_code_here'},
     'Display': {'TIME_FORMAT': '12', 'TEMP_UNIT': 'C'},
     'NTP': {'PREFERRED_SERVER': '127.0.0.1'},
-    'Cycle': {'time_display': '2', 'temp_display': '3', 'feels_like_display': '3', 'humidity_display': '2'}
+    'Cycle': {
+        'time_display': '2', 'temp_display': '3',
+        'feels_like_display': '3', 'humidity_display': '2'
+    }
 })
 config.read(CONFIG_FILE)
 
+
+def validate_config() -> bool:
+    """Validate configuration file and values.
+
+    Returns:
+        bool: True if configuration is valid, False otherwise
+    """
+    errors = []
+
+    # Check if config file exists and was read
+    if not os.path.exists(CONFIG_FILE):
+        errors.append(f"Configuration file not found: {CONFIG_FILE}")
+        return False
+
+    # Validate required sections
+    required_sections = ['Weather', 'Display', 'NTP', 'Cycle']
+    for section in required_sections:
+        if not config.has_section(section):
+            errors.append(f"Missing configuration section: [{section}]")
+
+    # Validate Weather section
+    if config.has_section('Weather'):
+        if not config.get('Weather', 'API_KEY', fallback='').strip():
+            errors.append(
+                "Weather API key is empty - get one from "
+                "https://openweathermap.org/api_keys/"
+            )
+        elif config.get('Weather', 'API_KEY', fallback='') == \
+                'your_openweathermap_api_key_here':
+            errors.append(
+                "Weather API key not configured - please edit config.ini"
+            )
+
+        zip_code = config.get('Weather', 'ZIP_CODE', fallback='')
+        if not zip_code.strip():
+            errors.append("ZIP code is empty - please configure your location")
+        elif zip_code == 'your_zip_code_here':
+            errors.append("ZIP code not configured - please edit config.ini")
+        elif not zip_code.isdigit() or len(zip_code) != 5:
+            errors.append("ZIP code must be 5 digits")
+
+    # Validate Display section
+    if config.has_section('Display'):
+        time_format = config.get('Display', 'TIME_FORMAT', fallback='')
+        if time_format not in ['12', '24']:
+            errors.append("TIME_FORMAT must be '12' or '24'")
+
+        temp_unit = config.get('Display', 'TEMP_UNIT', fallback='')
+        if temp_unit not in ['C', 'F']:
+            errors.append("TEMP_UNIT must be 'C' or 'F'")
+
+    # Validate Cycle section
+    if config.has_section('Cycle'):
+        cycle_options = [
+            'time_display', 'temp_display',
+            'feels_like_display', 'humidity_display'
+        ]
+        for option in cycle_options:
+            try:
+                value = config.getint('Cycle', option)
+                if value < 1 or value > 60:
+                    errors.append(f"{option} must be between 1 and 60 seconds")
+            except (ValueError, TypeError):
+                errors.append(f"{option} must be a valid integer")
+
+    # Print errors if any
+    if errors:
+        print("✗ Configuration validation failed:")
+        for error in errors:
+            print(f"  - {error}")
+        print(f"\nPlease edit {CONFIG_FILE} to fix these issues")
+        return False
+
+    print("✓ Configuration validation passed")
+    return True
+
+
+# Validate configuration before proceeding
+if not validate_config():
+    print("Configuration validation failed - exiting")
+    sys.exit(1)
+
 # Cache all config values at startup
-API_KEY = config['Weather']['API_KEY']
-ZIP_CODE = config['Weather']['ZIP_CODE']
-TIME_FORMAT = config['Display']['TIME_FORMAT']
-TEMP_UNIT = config['Display']['TEMP_UNIT']
-PREFERRED_NTP_SERVER = config['NTP']['PREFERRED_SERVER']
-TIME_DISPLAY = config.getint('Cycle', 'time_display')
-TEMP_DISPLAY = config.getint('Cycle', 'temp_display')
-FEELS_LIKE_DISPLAY = config.getint('Cycle', 'feels_like_display')
-HUMIDITY_DISPLAY = config.getint('Cycle', 'humidity_display')
+API_KEY: str = config['Weather']['API_KEY']
+ZIP_CODE: str = config['Weather']['ZIP_CODE']
+TIME_FORMAT: str = config['Display']['TIME_FORMAT']
+TEMP_UNIT: str = config['Display']['TEMP_UNIT']
+PREFERRED_NTP_SERVER: str = config['NTP']['PREFERRED_SERVER']
+TIME_DISPLAY: int = config.getint('Cycle', 'time_display')
+TEMP_DISPLAY: int = config.getint('Cycle', 'temp_display')
+FEELS_LIKE_DISPLAY: int = config.getint('Cycle', 'feels_like_display')
+HUMIDITY_DISPLAY: int = config.getint('Cycle', 'humidity_display')
 
 # Pre-compute conversion factor
-C_TO_F_FACTOR = 9/5  # Avoid repeated division
-SMOOTH_SCROLL = True  # Enable stock-ticker style scrolling for metrics
-SCROLL_DELAY = 0.12   # Seconds per marquee step for smooth feel
+C_TO_F_FACTOR: float = 9/5  # Avoid repeated division
+SMOOTH_SCROLL: bool = True  # Enable stock-ticker style scrolling for metrics
+SCROLL_DELAY: float = 0.12   # Seconds per marquee step for smooth feel
 
 # Global variables
-cached_weather_info = None
-display = None
-ntp_client = None  # Reuse NTP client
-SESSION = None  # Reusable HTTP session
-WEATHER_PARAMS = None  # Prebuilt OpenWeather params
+cached_weather_info: Optional[Tuple[int, int, int]] = None
+display: Optional[segments.Seg7x4] = None
+ntp_client: Optional[ntplib.NTPClient] = None  # Reuse NTP client
+SESSION: Optional[requests.Session] = None  # Reusable HTTP session
+WEATHER_PARAMS: Optional[Dict[str, str]] = None  # Prebuilt OpenWeather params
 
 # Display write cache
-last_display_text = None
-last_time_minute = None
+last_display_text: Optional[str] = None
+last_time_minute: Optional[int] = None
 
 
-def signal_handler(sig, frame):
-    """Handle graceful shutdown on SIGINT (Ctrl+C) or SIGTERM."""
+def signal_handler(sig: int, frame: Any) -> None:
+    """Handle graceful shutdown on SIGINT (Ctrl+C) or SIGTERM.
+
+    Args:
+        sig: Signal number
+        frame: Current stack frame
+    """
     if display:
         display.fill(0)
         display.show()
     sys.exit(0)
 
 
-def initialize_display():
-    """Initialize the 7-segment display with error handling."""
+def initialize_display() -> bool:
+    """Initialize the 7-segment display with error handling.
+
+    Returns:
+        bool: True if display initialized successfully, False otherwise
+    """
     global display
     try:
         i2c = busio.I2C(board.SCL, board.SDA)
         display = segments.Seg7x4(i2c)
+        print("✓ 7-segment display initialized successfully")
         return True
+    except busio.I2CError as e:
+        print(f"✗ I2C communication error: {e}")
+        print("  Check I2C connections and enable I2C interface")
+        return False
+    except ValueError as e:
+        print(f"✗ Display address error: {e}")
+        print("  Check display I2C address (should be 0x70)")
+        return False
     except Exception as e:
-        print(f"Display initialization failed: {e}")
+        print(f"✗ Display initialization failed: {e}")
+        print("  Run i2c-test.sh for detailed diagnostics")
         return False
 
 
-def initialize_ntp():
-    """Initialize NTP client once."""
+def initialize_ntp() -> bool:
+    """Initialize NTP client once.
+
+    Returns:
+        bool: True if NTP client initialized successfully, False otherwise
+    """
     global ntp_client
     try:
         ntp_client = ntplib.NTPClient()
+        print("✓ NTP client initialized successfully")
         return True
     except Exception as e:
-        print(f"NTP client initialization failed: {e}")
+        print(f"✗ NTP client initialization failed: {e}")
+        print("  NTP functionality will be limited")
         return False
 
 
-def initialize_http_session():
-    """Initialize a reusable HTTP session and prebuild request params."""
+def initialize_http_session() -> bool:
+    """Initialize a reusable HTTP session and prebuild request params.
+
+    Returns:
+        bool: True if HTTP session initialized successfully, False otherwise
+    """
     global SESSION, WEATHER_PARAMS
     try:
         SESSION = requests.Session()
-        WEATHER_PARAMS = {"zip": ZIP_CODE, "appid": API_KEY, "units": "metric"}
+        WEATHER_PARAMS = {
+            "zip": ZIP_CODE, "appid": API_KEY, "units": "metric"
+        }
+        print("✓ HTTP session initialized successfully")
         return True
     except Exception as e:
-        print(f"HTTP session initialization failed: {e}")
+        print(f"✗ HTTP session initialization failed: {e}")
+        print("  Weather functionality will be limited")
         SESSION = None
         WEATHER_PARAMS = None
         return False
 
 
-def celsius_to_fahrenheit(celsius):
-    """Convert Celsius temperature to Fahrenheit - optimized."""
+def celsius_to_fahrenheit(celsius: float) -> float:
+    """Convert Celsius temperature to Fahrenheit - optimized.
+
+    Args:
+        celsius: Temperature in Celsius
+
+    Returns:
+        float: Temperature in Fahrenheit
+    """
     return (celsius * C_TO_F_FACTOR) + 32
 
 
-def write_display(text):
-    """Write text to display only if it changed."""
+def write_display(text: str) -> None:
+    """Write text to display only if it changed.
+
+    Args:
+        text: Text to display on the 7-segment display
+    """
     global last_display_text
     if not display:
         return
@@ -119,14 +256,22 @@ def write_display(text):
         last_display_text = text
 
 
-def build_temp_string(temp, unit):
-    """Create temperature string without truncation for scrolling."""
+def build_temp_string(temp: float, unit: str) -> str:
+    """Create temperature string without truncation for scrolling.
+
+    Args:
+        temp: Temperature value
+        unit: Temperature unit (C or F)
+
+    Returns:
+        str: Formatted temperature string
+    """
     if temp < 0:
         return f"-{int(abs(temp))}{unit}"
     return f"{int(temp)}{unit}"
 
 
-def display_temperature(temp, unit):
+def display_temperature(temp: float, unit: str) -> None:
     """Display temperature with minimal string operations."""
     if not display:
         return
@@ -141,7 +286,7 @@ def display_temperature(temp, unit):
     write_display(temp_str[:4].rjust(4))
 
 
-def display_time():
+def display_time() -> None:
     """Display time with optimized formatting."""
     if not display:
         return
@@ -156,8 +301,12 @@ def display_time():
     write_display(f"{hour:2d}{minute:02d}")
 
 
-def display_humidity(humidity):
-    """Display humidity with integer rounding."""
+def display_humidity(humidity: float) -> None:
+    """Display humidity with integer rounding.
+
+    Args:
+        humidity: Humidity percentage value
+    """
     if not display:
         return
 
@@ -165,10 +314,17 @@ def display_humidity(humidity):
     write_display(f"{int(round(humidity)):02d}%".rjust(4))
 
 
-def scroll_combined_label_value(label, value_text, delay=SCROLL_DELAY):
+def scroll_combined_label_value(
+    label: str, value_text: str, delay: float = SCROLL_DELAY
+) -> None:
     """Scroll a combined label and value across the display.
 
     Example: label='Out', value_text='72F' => 'Out 72F   ' scrolls once.
+
+    Args:
+        label: Label text to display
+        value_text: Value text to display
+        delay: Delay between scroll steps in seconds
     """
     if not display:
         return
@@ -181,8 +337,12 @@ def scroll_combined_label_value(label, value_text, delay=SCROLL_DELAY):
     last_display_text = None
 
 
-def fetch_weather():
-    """Fetch weather with optimized retry logic."""
+def fetch_weather() -> Optional[Tuple[int, int, int]]:
+    """Fetch weather with optimized retry logic.
+
+    Returns:
+        Optional[Tuple[int, int, int]]: (temperature, feels_like, humidity) or None
+    """
     max_retries = 3
     retry_delay = 5
 
@@ -193,9 +353,10 @@ def fetch_weather():
         try:
             if SESSION is None:
                 response = requests.get(
-                    api_endpoint, params=params, timeout=10)
+                    API_ENDPOINT, params=params, timeout=10)
             else:
-                response = SESSION.get(api_endpoint, params=params, timeout=10)
+                response = SESSION.get(
+                    API_ENDPOINT, params=params, timeout=10)
             response.raise_for_status()
             weather_data = response.json()
 
@@ -212,27 +373,74 @@ def fetch_weather():
 
             return temperature, feels_like, humidity
 
+        except requests.exceptions.Timeout:
+            print(
+                f"✗ Weather API timeout (attempt {attempt + 1}/{max_retries})")
+            if attempt < max_retries - 1:
+                time.sleep(retry_delay)
+            else:
+                print("  Weather data unavailable - check internet connection")
+                return None
+        except requests.exceptions.ConnectionError:
+            print(
+                f"✗ Weather API connection error "
+                f"(attempt {attempt + 1}/{max_retries})"
+            )
+            if attempt < max_retries - 1:
+                time.sleep(retry_delay)
+            else:
+                print("  Weather data unavailable - check internet connection")
+                return None
+        except requests.exceptions.HTTPError as e:
+            if e.response.status_code == 401:
+                print("✗ Weather API authentication failed - check API key")
+            elif e.response.status_code == 404:
+                print("✗ Weather API location not found - check ZIP code")
+            else:
+                print(f"✗ Weather API HTTP error: {e}")
+            return None
         except requests.exceptions.RequestException as e:
+            print(f"✗ Weather API request error: {e}")
             if attempt < max_retries - 1:
                 time.sleep(retry_delay)
             else:
                 return None
+        except (KeyError, ValueError, TypeError) as e:
+            print(f"✗ Weather data parsing error: {e}")
+            print("  Weather API response format may have changed")
+            return None
 
 
-def get_current_time():
-    """Get current time with cached NTP client."""
+def get_current_time() -> time.struct_time:
+    """Get current time with cached NTP client.
+
+    Returns:
+        time.struct_time: Current time structure
+    """
     try:
         if ntp_client:
             response = ntp_client.request(
                 PREFERRED_NTP_SERVER, version=3, timeout=5)
             return time.localtime(response.tx_time)
-    except Exception:
-        pass
+    except ntplib.NTPException as e:
+        print(f"✗ NTP synchronization failed: {e}")
+        print("  Using system time - check GPS/NTP configuration")
+    except Exception as e:
+        print(f"✗ Time synchronization error: {e}")
     return time.localtime()
 
 
-def display_metric_with_message(message, display_function, *args, delay=2):
-    """Display metric with optimized timing."""
+def display_metric_with_message(
+    message: str, display_function: Any, *args: Any, delay: int = 2
+) -> None:
+    """Display metric with optimized timing.
+
+    Args:
+        message: Message to display via marquee
+        display_function: Function to call after message
+        *args: Arguments to pass to display_function
+        delay: Delay in seconds after message
+    """
     if not display:
         return
 
@@ -246,9 +454,10 @@ def display_metric_with_message(message, display_function, *args, delay=2):
     # display.show() occurs within write_display when content changes
 
 
-def main_loop():
+def main_loop() -> None:
     """Optimized main loop with reduced function calls."""
     cycle_counter = 0
+    global cached_weather_info
 
     while True:
         try:
@@ -293,9 +502,11 @@ def main_loop():
                 if SMOOTH_SCROLL:
                     # Scroll label + value together for a ticker feel
                     scroll_combined_label_value(
-                        'Out', build_temp_string(temperature, TEMP_UNIT))
+                        'Out', build_temp_string(temperature, TEMP_UNIT)
+                    )
                     scroll_combined_label_value(
-                        'FEEL', build_temp_string(feels_like, TEMP_UNIT))
+                        'FEEL', build_temp_string(feels_like, TEMP_UNIT)
+                    )
                     scroll_combined_label_value(
                         'rH', f"{int(round(humidity)):02d}%")
                 else:
@@ -311,8 +522,12 @@ def main_loop():
 
             cycle_counter = (cycle_counter + 1) % API_REFRESH_CYCLES
 
+        except KeyboardInterrupt:
+            print("\nReceived interrupt signal - shutting down gracefully")
+            break
         except Exception as e:
-            print(f"Error in main loop: {e}")
+            print(f"✗ Unexpected error in main loop: {e}")
+            print("  Continuing operation - check system logs for details")
             time.sleep(5)
 
 

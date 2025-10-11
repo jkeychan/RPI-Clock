@@ -2,6 +2,23 @@
 
 This guide helps you diagnose and fix common issues with the RPI-Clock project.
 
+## Diagnostic Scripts
+
+The project includes comprehensive diagnostic scripts to help troubleshoot issues:
+
+```bash
+# Test I2C display connection
+./i2c-test.sh
+
+# Test GPS connection and synchronization  
+./gps-test.sh
+
+# Test NTP time synchronization
+./ntp-test.sh
+```
+
+These scripts are installed to `/opt/rpi-clock/` and can be run from there. They provide detailed diagnostics and troubleshooting suggestions.
+
 ## GPS Issues
 
 ### No GPS Fix
@@ -384,6 +401,11 @@ If you're still experiencing issues:
 ## Common Commands Reference
 
 ```bash
+# Diagnostic Scripts
+./i2c-test.sh
+./gps-test.sh
+./ntp-test.sh
+
 # GPS Status
 cgps -s
 gpsmon
@@ -405,4 +427,7 @@ sudo journalctl -u rpi-clock -f
 # Network Test
 ping -c 3 openweathermap.org
 curl "http://api.openweathermap.org/data/2.5/weather?zip=90210&appid=YOUR_API_KEY"
+
+# Configuration Validation
+python3 /opt/rpi-clock/clock.py --help  # Shows configuration validation errors
 ```

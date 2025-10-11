@@ -24,7 +24,7 @@ command_exists() {
 # Function to prompt for user input
 prompt_yes_no() {
     while true; do
-        read -p "$1 (y/n): " yn
+        read -r -p "$1 (y/n): " yn
         case $yn in
             [Yy]* ) return 0;;
             [Nn]* ) return 1;;
@@ -65,12 +65,12 @@ i2c_enabled() {
 
 # Function to check if user is in i2c group
 user_in_i2c_group() {
-    groups $USER | grep -q i2c
+    groups "$USER" | grep -q i2c
 }
 
 # Function to check if user is in gpio group
 user_in_gpio_group() {
-    groups $USER | grep -q gpio
+    groups "$USER" | grep -q gpio
 }
 
 echo ""
@@ -113,6 +113,22 @@ else
     echo "adafruit-circuitpython-ht16k33 already installed"
 fi
 
+# Install development tools
+echo "Installing Python development tools..."
+if ! python_module_available flake8; then
+    pip3 install --user flake8
+else
+    echo "flake8 already installed"
+fi
+
+# Install shellcheck for bash script validation
+if ! command_exists shellcheck; then
+    echo "Installing shellcheck for bash script validation..."
+    sudo apt install -y shellcheck
+else
+    echo "shellcheck already installed"
+fi
+
 # Also install for root (needed for systemd service)
 echo "Installing Adafruit packages for root user..."
 if ! sudo python3 -c "import board" 2>/dev/null; then
@@ -147,6 +163,7 @@ echo ""
 echo "Step 5: Configuring I2C interface for display..."
 
 # Check if I2C is already enabled
+I2C_WAS_ENABLED=true
 if i2c_enabled; then
     echo "I2C interface already enabled"
 else
@@ -170,7 +187,7 @@ if user_in_i2c_group; then
     echo "User already in i2c group"
 else
     echo "Adding user to i2c group..."
-    sudo usermod -a -G i2c $USER
+    sudo usermod -a -G i2c "$USER"
 fi
 
 # Add user to gpio group
@@ -178,7 +195,7 @@ if user_in_gpio_group; then
     echo "User already in gpio group"
 else
     echo "Adding user to gpio group..."
-    sudo usermod -a -G gpio $USER
+    sudo usermod -a -G gpio "$USER"
 fi
 
 echo "I2C and GPIO interfaces configured successfully!"
@@ -186,9 +203,16 @@ echo "I2C and GPIO interfaces configured successfully!"
 echo ""
 echo "Step 6: Configuring GPS daemon..."
 
-# Stop and disable default gpsd service
-sudo systemctl stop gpsd.socket 2>/dev/null || true
-sudo systemctl disable gpsd.socket 2>/dev/null || true
+# Stop and disable default gpsd service (idempotent)
+echo "Configuring GPS daemon..."
+if systemctl is-active --quiet gpsd.socket; then
+    echo "Stopping default gpsd.socket service..."
+    sudo systemctl stop gpsd.socket
+fi
+if systemctl is-enabled --quiet gpsd.socket; then
+    echo "Disabling default gpsd.socket service..."
+    sudo systemctl disable gpsd.socket
+fi
 
 # Create gpsd service file
 sudo tee /etc/systemd/system/gpsd.service > /dev/null <<EOF
@@ -206,41 +230,61 @@ RestartSec=5
 WantedBy=multi-user.target
 EOF
 
-# Enable and start gpsd
+# Enable and start gpsd (idempotent)
 sudo systemctl daemon-reload
-sudo systemctl enable gpsd.service
+if ! systemctl is-enabled --quiet gpsd.service; then
+    echo "Enabling gpsd.service..."
+    sudo systemctl enable gpsd.service
+else
+    echo "gpsd.service already enabled"
+fi
 
 echo ""
 echo "Step 7: Configuring chrony for GPS time synchronization..."
 
-# Backup original chrony.conf
-sudo cp /etc/chrony/chrony.conf /etc/chrony/chrony.conf.backup
+# Backup original chrony.conf (idempotent)
+if [[ ! -f /etc/chrony/chrony.conf.backup ]]; then
+    echo "Backing up original chrony.conf..."
+    sudo cp /etc/chrony/chrony.conf /etc/chrony/chrony.conf.backup
+else
+    echo "chrony.conf backup already exists"
+fi
 
 # Install optimized chrony configuration
+echo "Installing optimized chrony configuration..."
 sudo cp chrony.conf /etc/chrony/chrony.conf
 
 # Restart chrony
+echo "Restarting chrony service..."
 sudo systemctl restart chrony
 
 echo ""
 echo "Step 8: Installing RPI-Clock files..."
 
-# Create installation directory
+# Create installation directory (idempotent)
 sudo mkdir -p /opt/rpi-clock
 
 # Copy project files
+echo "Installing RPI-Clock files..."
 sudo cp clock.py /opt/rpi-clock/
 sudo cp config.ini /opt/rpi-clock/
 sudo cp rpi-clock-logo.png /opt/rpi-clock/ 2>/dev/null || true
 sudo cp rpi-clock.gif /opt/rpi-clock/ 2>/dev/null || true
 
+# Copy diagnostic scripts
+sudo cp i2c-test.sh /opt/rpi-clock/
+sudo cp gps-test.sh /opt/rpi-clock/
+sudo cp ntp-test.sh /opt/rpi-clock/
+
 # Set proper permissions
+echo "Setting file permissions..."
 sudo chown -R root:root /opt/rpi-clock
 sudo chmod 755 /opt/rpi-clock
-sudo chmod 644 /opt/rpi-clock/*
+sudo chmod 644 /opt/rpi-clock/*.py /opt/rpi-clock/*.ini /opt/rpi-clock/*.png /opt/rpi-clock/*.gif
+sudo chmod 755 /opt/rpi-clock/*.sh
 
 # Make config.ini editable by the user who ran the setup
-sudo chown root:$USER /opt/rpi-clock/config.ini
+sudo chown root:"$USER" /opt/rpi-clock/config.ini
 sudo chmod 664 /opt/rpi-clock/config.ini
 
 echo ""
@@ -249,34 +293,78 @@ echo "Step 9: Creating systemd service for RPI-Clock..."
 # Create systemd service file (run as user with GPIO group access)
 sudo tee /etc/systemd/system/rpi-clock.service > /dev/null <<EOF
 [Unit]
-Description=RPI Clock
-After=network.target gpsd.service
+Description=RPI Clock - GPS-synchronized timekeeper with weather display
+Documentation=https://github.com/jkeychan/rpi-clock
+After=network.target gpsd.service chrony.service
+Wants=gpsd.service
 
 [Service]
 Type=simple
-User=$USER
-Group=$USER
+User="$USER"
+Group="$USER"
 WorkingDirectory=/opt/rpi-clock
 ExecStart=/usr/bin/python3 /opt/rpi-clock/clock.py
+ExecReload=/bin/kill -HUP \$MAINPID
 Restart=always
 RestartSec=10
+StartLimitInterval=60
+StartLimitBurst=3
+
+# Security settings
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/rpi-clock /tmp
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+MemoryDenyWriteExecute=true
+SystemCallFilter=@system-service
+SystemCallErrorNumber=EPERM
+
+# Resource limits
+LimitNOFILE=1024
+LimitNPROC=64
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=rpi-clock
 
 [Install]
 WantedBy=multi-user.target
 EOF
 
-# Enable and start service
+# Enable and start service (idempotent)
 sudo systemctl daemon-reload
-sudo systemctl enable rpi-clock.service
+if ! systemctl is-enabled --quiet rpi-clock.service; then
+    echo "Enabling rpi-clock.service..."
+    sudo systemctl enable rpi-clock.service
+else
+    echo "rpi-clock.service already enabled"
+fi
 
 echo ""
 echo "Step 10: Starting services..."
 
-# Start GPS daemon
-sudo systemctl start gpsd.service
+# Start GPS daemon (idempotent)
+if ! systemctl is-active --quiet gpsd.service; then
+    echo "Starting gpsd.service..."
+    sudo systemctl start gpsd.service
+else
+    echo "gpsd.service already running"
+fi
 
-# Start RPI-Clock service
-sudo systemctl start rpi-clock.service
+# Start RPI-Clock service (idempotent)
+if ! systemctl is-active --quiet rpi-clock.service; then
+    echo "Starting rpi-clock.service..."
+    sudo systemctl start rpi-clock.service
+else
+    echo "rpi-clock.service already running"
+fi
 
 echo ""
 echo "Setup completed successfully!"

@@ -226,6 +226,18 @@ sudo apt install chrony
 
 **Note**: On newer Debian/Ubuntu systems, you may encounter an "externally managed environment" error. The setup script handles this automatically with the `--break-system-packages` flag.
 
+### Development Tools
+
+The setup script also installs development tools for code quality:
+
+```bash
+# Install Python development tools
+pip3 install --user flake8
+
+# Install shellcheck for bash script validation
+sudo apt install shellcheck
+```
+
 ### Configure GPS Daemon (gpsd)
 
 1. **Disable Default Service**:
@@ -328,7 +340,7 @@ If you prefer traditional NTP:
 
 ### Update config.ini
 
-Edit the `config.ini` file with your settings:
+Edit the `config.ini` file with your settings. The application validates the configuration on startup and provides clear error messages for any issues:
 
 ```ini
 [Weather]
@@ -354,7 +366,16 @@ humidity_display = 2
 - **time_format**: `12` for 12-hour format, `24` for 24-hour format
 - **temp_unit**: `C` for Celsius, `F` for Fahrenheit
 - **preferred_server**: `127.0.0.1` for local GPS time, or external NTP server
-- **Cycle settings**: Display duration in seconds for each metric
+- **Cycle settings**: Display duration in seconds for each metric (1-60 seconds)
+
+### Configuration Validation
+
+The application validates configuration on startup:
+- Checks for required sections and options
+- Validates API key format and ZIP code format
+- Ensures display settings are valid
+- Verifies cycle durations are within acceptable range
+- Provides clear error messages for any issues
 
 ## Running the Clock
 
@@ -391,6 +412,23 @@ sudo systemctl restart rpi-clock.service
 ```
 
 ## Troubleshooting
+
+### Diagnostic Scripts
+
+The project includes comprehensive diagnostic scripts to help troubleshoot issues:
+
+```bash
+# Test I2C display connection
+./i2c-test.sh
+
+# Test GPS connection and synchronization
+./gps-test.sh
+
+# Test NTP time synchronization
+./ntp-test.sh
+```
+
+These scripts are installed to `/opt/rpi-clock/` and can be run from there.
 
 ### GPS Issues
 
