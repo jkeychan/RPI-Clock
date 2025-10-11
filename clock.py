@@ -2,6 +2,12 @@ import os
 import sys
 import time
 import signal
+
+# Change to home directory to avoid GPIO permission issues
+# The lgpio library tries to create notification files in the current working directory
+# /opt/rpi-clock has restrictive permissions, so we switch to home directory
+os.chdir(os.path.expanduser('~'))
+
 import board
 import busio
 import adafruit_ht16k33.segments as segments
@@ -12,7 +18,7 @@ import ntplib
 # Constants - avoid repeated lookups
 API_REFRESH_CYCLES = 10
 api_endpoint = "https://api.openweathermap.org/data/2.5/weather"
-CONFIG_FILE = 'config.ini'
+CONFIG_FILE = '/opt/rpi-clock/config.ini'
 
 # Pre-compile regex patterns and cache config values
 config = configparser.ConfigParser()
