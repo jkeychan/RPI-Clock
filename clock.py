@@ -136,7 +136,7 @@ HUMIDITY_DISPLAY: int = config.getint('Cycle', 'humidity_display')
 
 # Pre-compute conversion factor
 C_TO_F_FACTOR: float = 9/5  # Avoid repeated division
-SMOOTH_SCROLL: bool = True  # Enable stock-ticker style scrolling for metrics
+SMOOTH_SCROLL: bool = False  # Enable stock-ticker style scrolling for metrics
 SCROLL_DELAY: float = 0.12   # Seconds per marquee step for smooth feel
 
 # Global variables
