@@ -1,3 +1,9 @@
+import ntplib
+import configparser
+import requests
+import adafruit_ht16k33.segments as segments
+import busio
+import board
 import os
 import sys
 import time
@@ -7,13 +13,6 @@ import signal
 # The lgpio library tries to create notification files in the current working directory
 # /opt/rpi-clock has restrictive permissions, so we switch to system temp directory
 os.chdir('/tmp')
-
-import board
-import busio
-import adafruit_ht16k33.segments as segments
-import requests
-import configparser
-import ntplib
 
 
 # Constants - avoid repeated lookups

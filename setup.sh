@@ -68,6 +68,11 @@ user_in_i2c_group() {
     groups $USER | grep -q i2c
 }
 
+# Function to check if user is in gpio group
+user_in_gpio_group() {
+    groups $USER | grep -q gpio
+}
+
 echo ""
 echo "Step 1: Updating package lists..."
 sudo apt update
@@ -168,7 +173,15 @@ else
     sudo usermod -a -G i2c $USER
 fi
 
-echo "I2C interface configured successfully!"
+# Add user to gpio group
+if user_in_gpio_group; then
+    echo "User already in gpio group"
+else
+    echo "Adding user to gpio group..."
+    sudo usermod -a -G gpio $USER
+fi
+
+echo "I2C and GPIO interfaces configured successfully!"
 
 echo ""
 echo "Step 6: Configuring GPS daemon..."
@@ -233,7 +246,7 @@ sudo chmod 664 /opt/rpi-clock/config.ini
 echo ""
 echo "Step 9: Creating systemd service for RPI-Clock..."
 
-# Create systemd service file (run as root for GPIO access)
+# Create systemd service file (run as user with GPIO group access)
 sudo tee /etc/systemd/system/rpi-clock.service > /dev/null <<EOF
 [Unit]
 Description=RPI Clock
@@ -241,7 +254,8 @@ After=network.target gpsd.service
 
 [Service]
 Type=simple
-User=root
+User=$USER
+Group=$USER
 WorkingDirectory=/opt/rpi-clock
 ExecStart=/usr/bin/python3 /opt/rpi-clock/clock.py
 Restart=always
@@ -275,10 +289,11 @@ if [[ "${I2C_WAS_ENABLED:-true}" == "false" ]]; then
     echo ""
     echo "IMPORTANT: Reboot Required"
     echo "=========================="
-    echo "I2C interface has been enabled but requires a reboot to activate."
+    echo "I2C interface has been enabled and user has been added to GPIO group."
+    echo "Both require a reboot to activate."
     echo "The display will work after rebooting."
     echo ""
-    if prompt_yes_no "Do you want to reboot now to activate I2C?"; then
+    if prompt_yes_no "Do you want to reboot now to activate I2C and GPIO groups?"; then
         echo "Rebooting in 5 seconds..."
         echo "After reboot, the 7-segment display should show the current time."
         sleep 5
@@ -294,7 +309,17 @@ if [[ "${I2C_WAS_ENABLED:-true}" == "false" ]]; then
     fi
 else
     echo ""
-    echo "I2C was already enabled - no reboot required!"
+    echo "I2C was already enabled - checking if reboot needed for GPIO groups..."
+    if ! user_in_gpio_group; then
+        echo "User was added to GPIO group - reboot recommended for full functionality."
+        if prompt_yes_no "Do you want to reboot now to activate GPIO group membership?"; then
+            echo "Rebooting in 5 seconds..."
+            sleep 5
+            sudo reboot
+        fi
+    else
+        echo "I2C and GPIO groups already configured - no reboot required!"
+    fi
 fi
 echo ""
 echo "Next steps after reboot:"
