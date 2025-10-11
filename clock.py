@@ -3,10 +3,10 @@ import sys
 import time
 import signal
 
-# Change to home directory to avoid GPIO permission issues
+# Change to /tmp directory to avoid GPIO permission issues
 # The lgpio library tries to create notification files in the current working directory
-# /opt/rpi-clock has restrictive permissions, so we switch to home directory
-os.chdir(os.path.expanduser('~'))
+# /opt/rpi-clock has restrictive permissions, so we switch to system temp directory
+os.chdir('/tmp')
 
 import board
 import busio
@@ -14,6 +14,7 @@ import adafruit_ht16k33.segments as segments
 import requests
 import configparser
 import ntplib
+
 
 # Constants - avoid repeated lookups
 API_REFRESH_CYCLES = 10
