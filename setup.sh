@@ -53,13 +53,24 @@ package_installed() {
     dpkg -l "$1" 2>/dev/null | grep -q "^ii"
 }
 
+# Function to check if Python module is available
+python_module_available() {
+    python3 -c "import $1" 2>/dev/null
+}
+
+# Function to check if I2C is enabled
+i2c_enabled() {
+    raspi-config nonint get_i2c 2>/dev/null | grep -q "0"
+}
+
+# Function to check if user is in i2c group
+user_in_i2c_group() {
+    groups $USER | grep -q i2c
+}
+
 echo ""
-echo "Step 1: Checking and updating package lists..."
-if ! package_installed apt; then
-    sudo apt update
-else
-    echo "Package lists already up to date"
-fi
+echo "Step 1: Updating package lists..."
+sudo apt update
 
 echo ""
 echo "Step 2: Installing Python dependencies..."
@@ -71,17 +82,45 @@ fi
 
 # Check and install Python packages
 echo "Installing Python packages via apt (system-wide)..."
-sudo apt install -y python3-requests python3-ntplib
+if ! package_installed python3-requests; then
+    sudo apt install -y python3-requests
+else
+    echo "python3-requests already installed"
+fi
+
+if ! package_installed python3-ntplib; then
+    sudo apt install -y python3-ntplib
+else
+    echo "python3-ntplib already installed"
+fi
 
 # Install Adafruit packages via pip (not available in apt)
 echo "Installing Adafruit CircuitPython packages..."
-python3 -c "import board" 2>/dev/null || pip3 install --user adafruit-blinka
-python3 -c "import adafruit_ht16k33" 2>/dev/null || pip3 install --user adafruit-circuitpython-ht16k33
+if ! python_module_available board; then
+    pip3 install --user adafruit-blinka
+else
+    echo "adafruit-blinka already installed"
+fi
+
+if ! python_module_available adafruit_ht16k33; then
+    pip3 install --user adafruit-circuitpython-ht16k33
+else
+    echo "adafruit-circuitpython-ht16k33 already installed"
+fi
 
 # Also install for root (needed for systemd service)
 echo "Installing Adafruit packages for root user..."
-sudo python3 -c "import board" 2>/dev/null || sudo pip3 install adafruit-blinka
-sudo python3 -c "import adafruit_ht16k33" 2>/dev/null || sudo pip3 install adafruit-circuitpython-ht16k33
+if ! sudo python3 -c "import board" 2>/dev/null; then
+    sudo pip3 install adafruit-blinka
+else
+    echo "adafruit-blinka already installed for root"
+fi
+
+if ! sudo python3 -c "import adafruit_ht16k33" 2>/dev/null; then
+    sudo pip3 install adafruit-circuitpython-ht16k33
+else
+    echo "adafruit-circuitpython-ht16k33 already installed for root"
+fi
 
 echo ""
 echo "Step 3: Installing GPS daemon and clients..."
@@ -101,10 +140,15 @@ fi
 
 echo ""
 echo "Step 5: Configuring I2C interface for display..."
-echo "Enabling I2C interface..."
 
-# Enable I2C interface
-sudo raspi-config nonint do_i2c 0
+# Check if I2C is already enabled
+if i2c_enabled; then
+    echo "I2C interface already enabled"
+else
+    echo "Enabling I2C interface..."
+    sudo raspi-config nonint do_i2c 0
+    I2C_WAS_ENABLED=false
+fi
 
 # Configure serial port (disable login shell, enable hardware)
 sudo raspi-config nonint do_serial 1
@@ -117,10 +161,14 @@ else
 fi
 
 # Add user to i2c group
-sudo usermod -a -G i2c $USER
+if user_in_i2c_group; then
+    echo "User already in i2c group"
+else
+    echo "Adding user to i2c group..."
+    sudo usermod -a -G i2c $USER
+fi
 
 echo "I2C interface configured successfully!"
-echo "Note: A reboot will be required after setup to activate I2C."
 
 echo ""
 echo "Step 6: Configuring GPS daemon..."
@@ -222,25 +270,31 @@ echo ""
 echo "Services started:"
 echo "- GPS daemon (gpsd)"
 echo "- RPI-Clock service"
-echo ""
-echo "IMPORTANT: Reboot Required"
-echo "=========================="
-echo "I2C interface has been enabled but requires a reboot to activate."
-echo "The display will work after rebooting."
-echo ""
-if prompt_yes_no "Do you want to reboot now to activate I2C?"; then
-    echo "Rebooting in 5 seconds..."
-    echo "After reboot, the 7-segment display should show the current time."
-    sleep 5
-    sudo reboot
+# Check if reboot is needed
+if [[ "${I2C_WAS_ENABLED:-true}" == "false" ]]; then
+    echo ""
+    echo "IMPORTANT: Reboot Required"
+    echo "=========================="
+    echo "I2C interface has been enabled but requires a reboot to activate."
+    echo "The display will work after rebooting."
+    echo ""
+    if prompt_yes_no "Do you want to reboot now to activate I2C?"; then
+        echo "Rebooting in 5 seconds..."
+        echo "After reboot, the 7-segment display should show the current time."
+        sleep 5
+        sudo reboot
+    else
+        echo ""
+        echo "Manual reboot required:"
+        echo "sudo reboot"
+        echo ""
+        echo "After reboot:"
+        echo "- The 7-segment display should show the current time"
+        echo "- If the display is blank, check the troubleshooting guide in README.md"
+    fi
 else
     echo ""
-    echo "Manual reboot required:"
-    echo "sudo reboot"
-    echo ""
-    echo "After reboot:"
-    echo "- The 7-segment display should show the current time"
-    echo "- If the display is blank, check the troubleshooting guide in README.md"
+    echo "I2C was already enabled - no reboot required!"
 fi
 echo ""
 echo "Next steps after reboot:"
