@@ -32,7 +32,7 @@ CONFIG_FILE: str = '/opt/rpi-clock/config.ini'
 config: configparser.ConfigParser = configparser.ConfigParser()
 config.read_dict({
     'Weather': {'API_KEY': 'your_api_key_here', 'ZIP_CODE': 'your_zip_code_here'},
-    'Display': {'TIME_FORMAT': '12', 'TEMP_UNIT': 'C'},
+    'Display': {'TIME_FORMAT': '12', 'TEMP_UNIT': 'C', 'SMOOTH_SCROLL': 'false'},
     'NTP': {'PREFERRED_SERVER': '127.0.0.1'},
     'Cycle': {
         'time_display': '2', 'temp_display': '3',
@@ -92,6 +92,10 @@ def validate_config() -> bool:
         if temp_unit not in ['C', 'F']:
             errors.append("TEMP_UNIT must be 'C' or 'F'")
 
+        smooth_scroll = config.get('Display', 'SMOOTH_SCROLL', fallback='')
+        if smooth_scroll.lower() not in ['true', 'false']:
+            errors.append("SMOOTH_SCROLL must be 'true' or 'false'")
+
     # Validate Cycle section
     if config.has_section('Cycle'):
         cycle_options = [
@@ -128,6 +132,7 @@ API_KEY: str = config['Weather']['API_KEY']
 ZIP_CODE: str = config['Weather']['ZIP_CODE']
 TIME_FORMAT: str = config['Display']['TIME_FORMAT']
 TEMP_UNIT: str = config['Display']['TEMP_UNIT']
+SMOOTH_SCROLL: bool = config.getboolean('Display', 'smooth_scroll')
 PREFERRED_NTP_SERVER: str = config['NTP']['PREFERRED_SERVER']
 TIME_DISPLAY: int = config.getint('Cycle', 'time_display')
 TEMP_DISPLAY: int = config.getint('Cycle', 'temp_display')
@@ -136,7 +141,6 @@ HUMIDITY_DISPLAY: int = config.getint('Cycle', 'humidity_display')
 
 # Pre-compute conversion factor
 C_TO_F_FACTOR: float = 9/5  # Avoid repeated division
-SMOOTH_SCROLL: bool = False  # Enable stock-ticker style scrolling for metrics
 SCROLL_DELAY: float = 0.12   # Seconds per marquee step for smooth feel
 
 # Global variables
