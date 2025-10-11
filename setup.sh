@@ -175,6 +175,23 @@ fi
 # Configure serial port (disable login shell, enable hardware)
 sudo raspi-config nonint do_serial 1
 
+# Configure UART for GPS HAT
+echo "Configuring UART interface for GPS HAT..."
+if grep -q "enable_uart=1" /boot/firmware/config.txt; then
+    echo "UART already enabled"
+else
+    echo "Enabling UART interface..."
+    sudo sed -i 's/enable_uart=0/enable_uart=1/' /boot/firmware/config.txt
+fi
+
+# Disable Bluetooth to free up UART for GPS HAT
+if grep -q "dtoverlay=disable-bt" /boot/firmware/config.txt; then
+    echo "Bluetooth already disabled for GPS HAT"
+else
+    echo "Disabling Bluetooth to free UART for GPS HAT..."
+    sudo sed -i '/enable_uart=1/a dtoverlay=disable-bt' /boot/firmware/config.txt
+fi
+
 # Install I2C tools
 if ! package_installed i2c-tools; then
     sudo apt install -y i2c-tools
@@ -218,13 +235,15 @@ fi
 sudo tee /etc/systemd/system/gpsd.service > /dev/null <<EOF
 [Unit]
 Description=GPS daemon
-After=multi-user.target
+After=network.target
 
 [Service]
-Type=forking
-ExecStart=/usr/sbin/gpsd /dev/serial0 -F /var/run/gpsd.sock
+Type=simple
+ExecStart=/usr/sbin/gpsd -N -n /dev/ttyAMA0
 Restart=always
 RestartSec=5
+User=gpsd
+Group=dialout
 
 [Install]
 WantedBy=multi-user.target
@@ -295,7 +314,7 @@ sudo tee /etc/systemd/system/rpi-clock.service > /dev/null <<EOF
 [Unit]
 Description=RPI Clock - GPS-synchronized timekeeper with weather display
 Documentation=https://github.com/jkeychan/rpi-clock
-After=network.target gpsd.service chrony.service
+After=network.target gpsd.service
 Wants=gpsd.service
 
 [Service]
@@ -373,17 +392,41 @@ echo "Services started:"
 echo "- GPS daemon (gpsd)"
 echo "- RPI-Clock service"
 # Check if reboot is needed
+REBOOT_NEEDED=false
+REBOOT_REASONS=()
+
 if [[ "${I2C_WAS_ENABLED:-true}" == "false" ]]; then
+    REBOOT_NEEDED=true
+    REBOOT_REASONS+=("I2C interface enabled")
+fi
+
+if ! user_in_gpio_group; then
+    REBOOT_NEEDED=true
+    REBOOT_REASONS+=("User added to GPIO group")
+fi
+
+# Check if UART was enabled or Bluetooth disabled
+if ! grep -q "enable_uart=1" /boot/firmware/config.txt || ! grep -q "dtoverlay=disable-bt" /boot/firmware/config.txt; then
+    REBOOT_NEEDED=true
+    REBOOT_REASONS+=("UART enabled and Bluetooth disabled for GPS HAT")
+fi
+
+if [[ "$REBOOT_NEEDED" == "true" ]]; then
     echo ""
     echo "IMPORTANT: Reboot Required"
     echo "=========================="
-    echo "I2C interface has been enabled and user has been added to GPIO group."
-    echo "Both require a reboot to activate."
-    echo "The display will work after rebooting."
+    echo "The following changes require a reboot to activate:"
+    for reason in "${REBOOT_REASONS[@]}"; do
+        echo "- $reason"
+    done
     echo ""
-    if prompt_yes_no "Do you want to reboot now to activate I2C and GPIO groups?"; then
+    echo "After reboot:"
+    echo "- The GPS HAT will be detected on /dev/ttyAMA0"
+    echo "- The 7-segment display should show the current time"
+    echo "- GPS time synchronization will be available"
+    echo ""
+    if prompt_yes_no "Do you want to reboot now to activate all changes?"; then
         echo "Rebooting in 5 seconds..."
-        echo "After reboot, the 7-segment display should show the current time."
         sleep 5
         sudo reboot
     else
@@ -392,22 +435,13 @@ if [[ "${I2C_WAS_ENABLED:-true}" == "false" ]]; then
         echo "sudo reboot"
         echo ""
         echo "After reboot:"
+        echo "- GPS HAT will be available on /dev/ttyAMA0"
         echo "- The 7-segment display should show the current time"
         echo "- If the display is blank, check the troubleshooting guide in README.md"
     fi
 else
     echo ""
-    echo "I2C was already enabled - checking if reboot needed for GPIO groups..."
-    if ! user_in_gpio_group; then
-        echo "User was added to GPIO group - reboot recommended for full functionality."
-        if prompt_yes_no "Do you want to reboot now to activate GPIO group membership?"; then
-            echo "Rebooting in 5 seconds..."
-            sleep 5
-            sudo reboot
-        fi
-    else
-        echo "I2C and GPIO groups already configured - no reboot required!"
-    fi
+    echo "All interfaces already configured - no reboot required!"
 fi
 echo ""
 echo "Next steps after reboot:"
@@ -415,9 +449,11 @@ echo "1. Edit config.ini with your OpenWeatherMap API key and ZIP code:"
 echo "   sudo nano /opt/rpi-clock/config.ini"
 echo "2. Ensure your GPS antenna has a clear view of the sky"
 echo "3. Test GPS connection: cgps -s"
-echo "4. Check chrony sources: chronyc sources"
-echo "5. Check clock status: sudo systemctl status rpi-clock"
-echo "6. View clock logs: sudo journalctl -u rpi-clock -f"
+echo "4. Check GPS HAT detection: ls -la /dev/ttyAMA*"
+echo "5. Check chrony sources: chronyc sources"
+echo "6. Check clock status: sudo systemctl status rpi-clock"
+echo "7. View clock logs: sudo journalctl -u rpi-clock -f"
 echo ""
 echo "The clock will automatically start on boot."
+echo "GPS HAT will be available on /dev/ttyAMA0 after reboot."
 echo "For troubleshooting, see the README.md file."
