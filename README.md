@@ -82,7 +82,7 @@ A Raspberry Pi-based clock with GPS time synchronization and weather display usi
 
 #### Option 1: Automated Setup (Recommended)
 
-Use these commands to automatically enable I2C and configure the serial port:
+Use these commands to automatically enable I2C and configure the GPS HAT:
 
 ```bash
 # Enable I2C interface
@@ -90,6 +90,12 @@ sudo raspi-config nonint do_i2c 0
 
 # Configure serial port (disable login shell, enable hardware)
 sudo raspi-config nonint do_serial 1
+
+# Enable UART for GPS HAT
+sudo sed -i 's/enable_uart=0/enable_uart=1/' /boot/firmware/config.txt
+
+# Disable Bluetooth to free UART for GPS HAT
+sudo sed -i '/enable_uart=1/a dtoverlay=disable-bt' /boot/firmware/config.txt
 
 # Install I2C tools
 sudo apt install -y i2c-tools
@@ -117,7 +123,16 @@ sudo reboot
    - Select `No` for login shell over serial
    - Select `Yes` to enable serial port hardware
 
-4. **Reboot**:
+4. **Configure GPS HAT** (manual step):
+   ```bash
+   # Enable UART for GPS HAT
+   sudo sed -i 's/enable_uart=0/enable_uart=1/' /boot/firmware/config.txt
+   
+   # Disable Bluetooth to free UART for GPS HAT
+   sudo sed -i '/enable_uart=1/a dtoverlay=disable-bt' /boot/firmware/config.txt
+   ```
+
+5. **Reboot**:
    ```bash
    sudo reboot
    ```
@@ -127,12 +142,17 @@ sudo reboot
 You can also manually edit the configuration files:
 
 ```bash
-# Enable I2C by adding to /boot/config.txt
-echo "dtparam=i2c_arm=on" | sudo tee -a /boot/config.txt
+# Enable I2C by adding to /boot/firmware/config.txt
+echo "dtparam=i2c_arm=on" | sudo tee -a /boot/firmware/config.txt
 
 # Disable serial console login and enable hardware
-sudo sed -i 's/console=serial0,115200//' /boot/cmdline.txt
-echo "enable_uart=1" | sudo tee -a /boot/config.txt
+sudo sed -i 's/console=serial0,115200//' /boot/firmware/cmdline.txt
+
+# Enable UART for GPS HAT
+echo "enable_uart=1" | sudo tee -a /boot/firmware/config.txt
+
+# Disable Bluetooth to free UART for GPS HAT
+echo "dtoverlay=disable-bt" | sudo tee -a /boot/firmware/config.txt
 
 # Install I2C tools and add user to group
 sudo apt install -y i2c-tools
@@ -180,28 +200,68 @@ After enabling I2C and rebooting, verify the setup is working:
    ```
    Should print `['0x70']` if the display is connected properly.
 
-### Disable Bluetooth (Pi Zero 2 W)
+### Verify GPS HAT Setup
 
-If using Raspberry Pi Zero 2 W, disable Bluetooth to free up UART:
+After enabling UART and disabling Bluetooth, verify the GPS HAT is detected:
 
-1. **Add to `/boot/config.txt`**:
+1. **Check GPS HAT Device**:
    ```bash
-   sudo nano /boot/config.txt
+   ls -la /dev/ttyAMA*
    ```
-   Add this line:
-   ```
-   dtoverlay=pi3-disable-bt
-   ```
+   You should see `/dev/ttyAMA0` if the GPS HAT is properly connected.
 
-2. **Disable Bluetooth Service**:
+2. **Check I2C Detection**:
    ```bash
-   sudo systemctl disable hciuart
+   sudo i2cdetect -y 1
+   ```
+   You should see a device at address `70` (GPS HAT I2C interface).
+
+3. **Test GPS Connection**:
+   ```bash
+   # Install GPS tools
+   sudo apt install gpsd gpsd-clients
+   
+   # Test GPS data reception with PPS auto-detection
+   sudo gpsd -N -n /dev/ttyAMA0
+   timeout 10 gpspipe -r | head -5
+   ```
+   Should show GPS data if antenna has clear sky view.
+   PPS will be auto-detected if available for microsecond precision timing.
+
+4. **Check GPS Status**:
+   ```bash
+   cgps -s
+   ```
+   Shows GPS fix status and satellite information.
+
+### GPS HAT Configuration
+
+The GPS HAT requires UART access and Bluetooth must be disabled to free the UART interface:
+
+1. **UART and Bluetooth Configuration** (already configured in automated setup):
+   ```bash
+   # Enable UART for GPS HAT
+   sudo sed -i 's/enable_uart=0/enable_uart=1/' /boot/firmware/config.txt
+   
+   # Disable Bluetooth to free UART for GPS HAT
+   sudo sed -i '/enable_uart=1/a dtoverlay=disable-bt' /boot/firmware/config.txt
    ```
 
-3. **Reboot**:
+2. **Reboot**:
    ```bash
    sudo reboot
    ```
+
+3. **Verify GPS HAT Detection**:
+   ```bash
+   # Check GPS HAT device
+   ls -la /dev/ttyAMA*
+   
+   # Check PPS device (precision timing)
+   ls -la /dev/pps*
+   ```
+   Should show `/dev/ttyAMA0` and `/dev/pps0` available for GPS HAT.
+   PPS provides microsecond precision timing for chrony.
 
 ## Software Installation
 

@@ -38,18 +38,27 @@ fi
 echo ""
 echo "Step 2: Checking GPS hardware connection..."
 echo "------------------------------------------"
-if [[ -c /dev/serial0 ]]; then
-    echo "✓ Serial device /dev/serial0 exists"
+if [[ -c /dev/ttyAMA0 ]]; then
+    echo "✓ GPS HAT device /dev/ttyAMA0 exists (primary GPS interface)"
 else
-    echo "✗ Serial device /dev/serial0 NOT found"
-    echo "  Check GPS HAT connection and enable serial interface"
+    echo "✗ GPS HAT device /dev/ttyAMA0 NOT found"
+    echo "  Check GPS HAT connection and UART configuration"
     echo "  Run: sudo raspi-config nonint do_serial 1"
+    echo "  Ensure UART is enabled: enable_uart=1 in /boot/firmware/config.txt"
+    echo "  Disable Bluetooth: dtoverlay=disable-bt in /boot/firmware/config.txt"
 fi
 
-if [[ -c /dev/ttyAMA0 ]]; then
-    echo "✓ Serial device /dev/ttyAMA0 exists"
+if [[ -c /dev/serial0 ]]; then
+    echo "✓ Serial device /dev/serial0 exists (fallback interface)"
 else
-    echo "✗ Serial device /dev/ttyAMA0 NOT found"
+    echo "✗ Serial device /dev/serial0 NOT found"
+fi
+
+if [[ -c /dev/pps0 ]]; then
+    echo "✓ PPS device /dev/pps0 exists (precision timing)"
+else
+    echo "✗ PPS device /dev/pps0 NOT found"
+    echo "  PPS provides microsecond precision timing"
 fi
 
 echo ""
