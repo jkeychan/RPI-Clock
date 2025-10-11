@@ -69,19 +69,19 @@ else
     echo "python3-pip already installed"
 fi
 
-# Check and install Python packages (for both user and root)
-echo "Checking Python packages..."
-python3 -c "import board" 2>/dev/null || pip3 install adafruit-blinka
-python3 -c "import adafruit_ht16k33" 2>/dev/null || pip3 install adafruit-circuitpython-ht16k33
-python3 -c "import requests" 2>/dev/null || pip3 install requests
-python3 -c "import ntplib" 2>/dev/null || pip3 install ntplib
+# Check and install Python packages
+echo "Installing Python packages via apt (system-wide)..."
+sudo apt install -y python3-requests python3-ntplib
+
+# Install Adafruit packages via pip (not available in apt)
+echo "Installing Adafruit CircuitPython packages..."
+python3 -c "import board" 2>/dev/null || pip3 install --user adafruit-blinka
+python3 -c "import adafruit_ht16k33" 2>/dev/null || pip3 install --user adafruit-circuitpython-ht16k33
 
 # Also install for root (needed for systemd service)
-echo "Installing Python packages for root user..."
+echo "Installing Adafruit packages for root user..."
 sudo python3 -c "import board" 2>/dev/null || sudo pip3 install adafruit-blinka
 sudo python3 -c "import adafruit_ht16k33" 2>/dev/null || sudo pip3 install adafruit-circuitpython-ht16k33
-sudo python3 -c "import requests" 2>/dev/null || sudo pip3 install requests
-sudo python3 -c "import ntplib" 2>/dev/null || sudo pip3 install ntplib
 
 echo ""
 echo "Step 3: Installing GPS daemon and clients..."
