@@ -32,7 +32,7 @@ CONFIG_FILE: str = '/opt/rpi-clock/config.ini'
 config: configparser.ConfigParser = configparser.ConfigParser()
 config.read_dict({
     'Weather': {'API_KEY': 'your_api_key_here', 'ZIP_CODE': 'your_zip_code_here'},
-    'Display': {'TIME_FORMAT': '12', 'TEMP_UNIT': 'C', 'SMOOTH_SCROLL': 'false'},
+    'Display': {'TIME_FORMAT': '12', 'TEMP_UNIT': 'C', 'SMOOTH_SCROLL': 'false', 'BRIGHTNESS': '0.8'},
     'NTP': {'PREFERRED_SERVER': '127.0.0.1'},
     'Cycle': {
         'time_display': '2', 'temp_display': '3',
@@ -96,6 +96,14 @@ def validate_config() -> bool:
         if smooth_scroll.lower() not in ['true', 'false']:
             errors.append("SMOOTH_SCROLL must be 'true' or 'false'")
 
+        brightness = config.get('Display', 'BRIGHTNESS', fallback='')
+        try:
+            brightness_val = float(brightness)
+            if brightness_val < 0.0 or brightness_val > 1.0:
+                errors.append("BRIGHTNESS must be between 0.0 and 1.0")
+        except (ValueError, TypeError):
+            errors.append("BRIGHTNESS must be a valid number between 0.0 and 1.0")
+
     # Validate Cycle section
     if config.has_section('Cycle'):
         cycle_options = [
@@ -133,6 +141,7 @@ ZIP_CODE: str = config['Weather']['ZIP_CODE']
 TIME_FORMAT: str = config['Display']['TIME_FORMAT']
 TEMP_UNIT: str = config['Display']['TEMP_UNIT']
 SMOOTH_SCROLL: bool = config.getboolean('Display', 'smooth_scroll')
+BRIGHTNESS: float = config.getfloat('Display', 'brightness')
 PREFERRED_NTP_SERVER: str = config['NTP']['PREFERRED_SERVER']
 TIME_DISPLAY: int = config.getint('Cycle', 'time_display')
 TEMP_DISPLAY: int = config.getint('Cycle', 'temp_display')
@@ -178,7 +187,8 @@ def initialize_display() -> bool:
     try:
         i2c = busio.I2C(board.SCL, board.SDA)
         display = segments.Seg7x4(i2c)
-        print("✓ 7-segment display initialized successfully")
+        display.brightness = BRIGHTNESS
+        print(f"✓ 7-segment display initialized successfully (brightness: {BRIGHTNESS})")
         return True
     except busio.I2CError as e:
         print(f"✗ I2C communication error: {e}")
