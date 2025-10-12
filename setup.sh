@@ -480,7 +480,7 @@ for file in i2c-test.sh gps-test.sh ntp-test.sh; do
     fi
 done
 
-if [[ "$CLOCK_NEEDS_UPDATE" == "true" ]] || [[ "$CONFIG_EXISTS" == "false" ]] || [[ "$SCRIPTS_NEED_UPDATE" == "true" ]] || [[ "$SKIP_PACKAGES" == "false" ]]; then
+if [[ "$CLOCK_NEEDS_UPDATE" == "true" ]] || [[ "$CONFIG_EXISTS" == "false" ]] || [[ "$SCRIPTS_NEED_UPDATE" == "true" ]]; then
     echo ""
     echo -e "${CYAN}Step 8: Installing RPI-Clock files...${NC}"
 
