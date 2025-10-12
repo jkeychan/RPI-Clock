@@ -525,7 +525,7 @@ def main_loop() -> None:
                         'FEEL', build_temp_string(feels_like, TEMP_UNIT)
                     )
                     scroll_combined_label_value(
-                        'rH', f"{int(round(humidity)):02d}%")
+                        'rH', f"{int(round(humidity)):02d}")
                 else:
                     # Original stepwise messaging
                     display_metric_with_message(
