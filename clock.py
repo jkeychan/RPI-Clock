@@ -37,6 +37,9 @@ config.read_dict({
     'Cycle': {
         'time_display': '2', 'temp_display': '3',
         'feels_like_display': '3', 'humidity_display': '2'
+    },
+    'CustomText': {
+        'enabled': 'false', 'text': '', 'interval_minutes': '15', 'display_duration': '3'
     }
 })
 config.read(CONFIG_FILE)
@@ -56,7 +59,7 @@ def validate_config() -> bool:
         return False
 
     # Validate required sections
-    required_sections = ['Weather', 'Display', 'NTP', 'Cycle']
+    required_sections = ['Weather', 'Display', 'NTP', 'Cycle', 'CustomText']
     for section in required_sections:
         if not config.has_section(section):
             errors.append(f"Missing configuration section: [{section}]")
@@ -119,6 +122,37 @@ def validate_config() -> bool:
             except (ValueError, TypeError):
                 errors.append(f"{option} must be a valid integer")
 
+    # Validate CustomText section
+    if config.has_section('CustomText'):
+        enabled = config.get('CustomText', 'enabled', fallback='')
+        if enabled.lower() not in ['true', 'false']:
+            errors.append("CustomText enabled must be 'true' or 'false'")
+        elif enabled.lower() == 'true':
+            custom_text = config.get('CustomText', 'text', fallback='')
+            if not custom_text.strip():
+                errors.append("CustomText text cannot be empty when enabled")
+            elif len(custom_text) > 50:
+                errors.append(
+                    "CustomText text should be 50 characters or less for optimal display")
+
+            try:
+                interval = config.getint('CustomText', 'interval_minutes')
+                if interval < 1 or interval > 1440:  # 1 minute to 24 hours
+                    errors.append(
+                        "CustomText interval_minutes must be between 1 and 1440")
+            except (ValueError, TypeError):
+                errors.append(
+                    "CustomText interval_minutes must be a valid integer")
+
+            try:
+                duration = config.getint('CustomText', 'display_duration')
+                if duration < 1 or duration > 60:
+                    errors.append(
+                        "CustomText display_duration must be between 1 and 60 seconds")
+            except (ValueError, TypeError):
+                errors.append(
+                    "CustomText display_duration must be a valid integer")
+
     # Print errors if any
     if errors:
         print("✗ Configuration validation failed:")
@@ -148,6 +182,10 @@ TIME_DISPLAY: int = config.getint('Cycle', 'time_display')
 TEMP_DISPLAY: int = config.getint('Cycle', 'temp_display')
 FEELS_LIKE_DISPLAY: int = config.getint('Cycle', 'feels_like_display')
 HUMIDITY_DISPLAY: int = config.getint('Cycle', 'humidity_display')
+CUSTOM_TEXT_ENABLED: bool = config.getboolean('CustomText', 'enabled')
+CUSTOM_TEXT: str = config.get('CustomText', 'text', fallback='')
+CUSTOM_TEXT_INTERVAL: int = config.getint('CustomText', 'interval_minutes')
+CUSTOM_TEXT_DURATION: int = config.getint('CustomText', 'display_duration')
 
 # Pre-compute conversion factor
 C_TO_F_FACTOR: float = 9/5  # Avoid repeated division
@@ -163,6 +201,7 @@ WEATHER_PARAMS: Optional[Dict[str, str]] = None  # Prebuilt OpenWeather params
 # Display write cache
 last_display_text: Optional[str] = None
 last_time_minute: Optional[int] = None
+last_custom_text_time: Optional[float] = None
 
 
 def signal_handler(sig: int, frame: Any) -> None:
@@ -471,6 +510,57 @@ def display_metric_with_message(
     # display.show() occurs within write_display when content changes
 
 
+def display_custom_text() -> None:
+    """Display custom text with scrolling animation.
+
+    Uses the configured custom text and scrolls it across the display
+    for the configured duration.
+    """
+    if not display or not CUSTOM_TEXT_ENABLED or not CUSTOM_TEXT.strip():
+        return
+
+    print(f"Displaying custom text: {CUSTOM_TEXT}")
+
+    # Clear display and scroll the custom text
+    display.fill(0)
+    display.marquee(CUSTOM_TEXT, delay=SCROLL_DELAY, loop=False)
+
+    # Wait for the configured duration
+    time.sleep(CUSTOM_TEXT_DURATION)
+
+    # Invalidate cache since marquee wrote directly to display
+    global last_display_text
+    last_display_text = None
+
+
+def should_display_custom_text() -> bool:
+    """Check if custom text should be displayed based on interval timing.
+
+    Returns:
+        bool: True if custom text should be displayed, False otherwise
+    """
+    if not CUSTOM_TEXT_ENABLED or not CUSTOM_TEXT.strip():
+        return False
+
+    global last_custom_text_time
+    current_time = time.time()
+
+    # If never displayed before, display it
+    if last_custom_text_time is None:
+        last_custom_text_time = current_time
+        return True
+
+    # Check if enough time has passed
+    time_since_last = current_time - last_custom_text_time
+    interval_seconds = CUSTOM_TEXT_INTERVAL * 60
+
+    if time_since_last >= interval_seconds:
+        last_custom_text_time = current_time
+        return True
+
+    return False
+
+
 def main_loop() -> None:
     """Optimized main loop with reduced function calls."""
     cycle_counter = 0
@@ -508,6 +598,10 @@ def main_loop() -> None:
                     seconds_elapsed += 1
             else:
                 time.sleep(total_seconds)
+
+            # Check if custom text should be displayed
+            if should_display_custom_text():
+                display_custom_text()
 
             # Weather display - only fetch when needed
             if cycle_counter == 0 or cached_weather_info is None:

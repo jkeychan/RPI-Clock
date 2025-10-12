@@ -11,7 +11,8 @@ A Raspberry Pi-based clock with GPS time synchronization and weather display usi
 - **GPS Time Synchronization**: Uses Adafruit Ultimate GPS HAT for precise timekeeping
 - **Weather Display**: Shows current temperature, feels-like temperature, and humidity
 - **7-Segment Display**: Clean, readable LED display with scrolling text
-- **Configurable**: Customizable time format, temperature units, and display cycles
+- **Custom Text Display**: Configurable custom messages that scroll across the display at set intervals
+- **Configurable**: Customizable time format, temperature units, display cycles, and custom text
 - **Modular Design**: Easy to assemble and modify with plug-and-play connections
 
 ## Hardware Requirements
@@ -453,6 +454,12 @@ time_display = 2
 temp_display = 2
 feels_like_display = 2
 humidity_display = 2
+
+[CustomText]
+enabled = true
+text = WART 95.5 FM
+interval_minutes = 15
+display_duration = 3
 ```
 
 ### Configuration Options
@@ -461,6 +468,11 @@ humidity_display = 2
 - **temp_unit**: `C` for Celsius, `F` for Fahrenheit
 - **preferred_server**: `127.0.0.1` for local GPS time, or external NTP server
 - **Cycle settings**: Display duration in seconds for each metric (1-60 seconds)
+- **CustomText settings**:
+  - **enabled**: `true` to enable custom text display, `false` to disable
+  - **text**: Custom message to display (max 50 characters recommended)
+  - **interval_minutes**: How often to show custom text (1-1440 minutes, i.e., 1 minute to 24 hours)
+  - **display_duration**: How long to display custom text (1-60 seconds)
 
 ### Configuration Validation
 
@@ -469,6 +481,7 @@ The application validates configuration on startup:
 - Validates API key format and ZIP code format
 - Ensures display settings are valid
 - Verifies cycle durations are within acceptable range
+- Validates custom text settings when enabled
 - Provides clear error messages for any issues
 
 ## Running the Clock
