@@ -326,8 +326,9 @@ def display_humidity(humidity: float) -> None:
     if not display:
         return
 
-    # Show percentage in static mode (omit label to fit 4 chars)
-    write_display(f"{int(round(humidity)):02d}%".rjust(4))
+    # Show humidity with "rH" prefix (e.g., "rH50" for 50% humidity)
+    # Since 7-segment display can't show '%', we use "rH" to indicate relative humidity
+    write_display(f"rH{int(round(humidity)):02d}")
 
 
 def scroll_combined_label_value(
