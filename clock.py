@@ -31,9 +31,9 @@ CONFIG_FILE: str = '/opt/rpi-clock/config.ini'
 # Pre-compile regex patterns and cache config values
 config: configparser.ConfigParser = configparser.ConfigParser()
 config.read_dict({
-    'Weather': {'API_KEY': 'your_api_key_here', 'ZIP_CODE': 'your_zip_code_here'},
-    'Display': {'TIME_FORMAT': '12', 'TEMP_UNIT': 'C', 'SMOOTH_SCROLL': 'false', 'BRIGHTNESS': '0.8'},
-    'NTP': {'PREFERRED_SERVER': '127.0.0.1'},
+    'Weather': {'api_key': 'your_api_key_here', 'zip_code': 'your_zip_code_here'},
+    'Display': {'time_format': '12', 'temp_unit': 'C', 'smooth_scroll': 'false', 'brightness': '0.8'},
+    'NTP': {'preferred_server': '127.0.0.1'},
     'Cycle': {
         'time_display': '2', 'temp_display': '3',
         'feels_like_display': '3', 'humidity_display': '2'
@@ -63,18 +63,18 @@ def validate_config() -> bool:
 
     # Validate Weather section
     if config.has_section('Weather'):
-        if not config.get('Weather', 'API_KEY', fallback='').strip():
+        if not config.get('Weather', 'api_key', fallback='').strip():
             errors.append(
                 "Weather API key is empty - get one from "
                 "https://openweathermap.org/api_keys/"
             )
-        elif config.get('Weather', 'API_KEY', fallback='') == \
+        elif config.get('Weather', 'api_key', fallback='') == \
                 'your_openweathermap_api_key_here':
             errors.append(
                 "Weather API key not configured - please edit config.ini"
             )
 
-        zip_code = config.get('Weather', 'ZIP_CODE', fallback='')
+        zip_code = config.get('Weather', 'zip_code', fallback='')
         if not zip_code.strip():
             errors.append("ZIP code is empty - please configure your location")
         elif zip_code == 'your_zip_code_here':
@@ -84,26 +84,26 @@ def validate_config() -> bool:
 
     # Validate Display section
     if config.has_section('Display'):
-        time_format = config.get('Display', 'TIME_FORMAT', fallback='')
+        time_format = config.get('Display', 'time_format', fallback='')
         if time_format not in ['12', '24']:
-            errors.append("TIME_FORMAT must be '12' or '24'")
+            errors.append("time_format must be '12' or '24'")
 
-        temp_unit = config.get('Display', 'TEMP_UNIT', fallback='')
+        temp_unit = config.get('Display', 'temp_unit', fallback='')
         if temp_unit not in ['C', 'F']:
-            errors.append("TEMP_UNIT must be 'C' or 'F'")
+            errors.append("temp_unit must be 'C' or 'F'")
 
-        smooth_scroll = config.get('Display', 'SMOOTH_SCROLL', fallback='')
+        smooth_scroll = config.get('Display', 'smooth_scroll', fallback='')
         if smooth_scroll.lower() not in ['true', 'false']:
-            errors.append("SMOOTH_SCROLL must be 'true' or 'false'")
+            errors.append("smooth_scroll must be 'true' or 'false'")
 
-        brightness = config.get('Display', 'BRIGHTNESS', fallback='')
+        brightness = config.get('Display', 'brightness', fallback='')
         try:
             brightness_val = float(brightness)
             if brightness_val < 0.0 or brightness_val > 1.0:
-                errors.append("BRIGHTNESS must be between 0.0 and 1.0")
+                errors.append("brightness must be between 0.0 and 1.0")
         except (ValueError, TypeError):
             errors.append(
-                "BRIGHTNESS must be a valid number between 0.0 and 1.0")
+                "brightness must be a valid number between 0.0 and 1.0")
 
     # Validate Cycle section
     if config.has_section('Cycle'):
@@ -137,13 +137,13 @@ if not validate_config():
     sys.exit(1)
 
 # Cache all config values at startup
-API_KEY: str = config['Weather']['API_KEY']
-ZIP_CODE: str = config['Weather']['ZIP_CODE']
-TIME_FORMAT: str = config['Display']['TIME_FORMAT']
-TEMP_UNIT: str = config['Display']['TEMP_UNIT']
+API_KEY: str = config['Weather']['api_key']
+ZIP_CODE: str = config['Weather']['zip_code']
+TIME_FORMAT: str = config['Display']['time_format']
+TEMP_UNIT: str = config['Display']['temp_unit']
 SMOOTH_SCROLL: bool = config.getboolean('Display', 'smooth_scroll')
 BRIGHTNESS: float = config.getfloat('Display', 'brightness')
-PREFERRED_NTP_SERVER: str = config['NTP']['PREFERRED_SERVER']
+PREFERRED_NTP_SERVER: str = config['NTP']['preferred_server']
 TIME_DISPLAY: int = config.getint('Cycle', 'time_display')
 TEMP_DISPLAY: int = config.getint('Cycle', 'temp_display')
 FEELS_LIKE_DISPLAY: int = config.getint('Cycle', 'feels_like_display')
