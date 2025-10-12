@@ -102,21 +102,24 @@ fi
 # Install Adafruit packages via pip (not available in apt)
 echo "Installing Adafruit CircuitPython packages..."
 if ! python_module_available board; then
-    pip3 install --user adafruit-blinka
+    echo "Installing adafruit-blinka..."
+    pip3 install --user adafruit-blinka 2>/dev/null || echo "adafruit-blinka installation skipped (externally managed environment)"
 else
     echo "adafruit-blinka already installed"
 fi
 
 if ! python_module_available adafruit_ht16k33; then
-    pip3 install --user adafruit-circuitpython-ht16k33
+    echo "Installing adafruit-circuitpython-ht16k33..."
+    pip3 install --user adafruit-circuitpython-ht16k33 2>/dev/null || echo "adafruit-circuitpython-ht16k33 installation skipped (externally managed environment)"
 else
     echo "adafruit-circuitpython-ht16k33 already installed"
 fi
 
-# Install development tools
+# Install development tools (optional - may fail on externally managed environments)
 echo "Installing Python development tools..."
 if ! python_module_available flake8; then
-    pip3 install --user flake8
+    echo "Attempting to install flake8 (may fail on externally managed environments)..."
+    pip3 install --user flake8 2>/dev/null || echo "flake8 installation skipped (externally managed environment)"
 else
     echo "flake8 already installed"
 fi
@@ -132,13 +135,15 @@ fi
 # Also install for root (needed for systemd service)
 echo "Installing Adafruit packages for root user..."
 if ! sudo python3 -c "import board" 2>/dev/null; then
-    sudo pip3 install adafruit-blinka
+    echo "Installing adafruit-blinka for root..."
+    sudo pip3 install adafruit-blinka 2>/dev/null || echo "adafruit-blinka root installation skipped (externally managed environment)"
 else
     echo "adafruit-blinka already installed for root"
 fi
 
 if ! sudo python3 -c "import adafruit_ht16k33" 2>/dev/null; then
-    sudo pip3 install adafruit-circuitpython-ht16k33
+    echo "Installing adafruit-circuitpython-ht16k33 for root..."
+    sudo pip3 install adafruit-circuitpython-ht16k33 2>/dev/null || echo "adafruit-circuitpython-ht16k33 root installation skipped (externally managed environment)"
 else
     echo "adafruit-circuitpython-ht16k33 already installed for root"
 fi
