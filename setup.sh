@@ -105,9 +105,9 @@ if [[ ! -f /etc/systemd/system/rpi-clock.service ]] || [[ ! -f /etc/systemd/syst
 fi
 
 # Check if config files exist
-CONFIG_EXISTS=true
+CONFIG_FILES_EXIST=true
 if [[ ! -f /opt/rpi-clock/clock.py ]] || [[ ! -f /opt/rpi-clock/config.ini ]]; then
-    CONFIG_EXISTS=false
+    CONFIG_FILES_EXIST=false
 fi
 
 # Check if I2C and GPIO groups are set up
@@ -125,7 +125,7 @@ if [[ -f clock.py ]] && [[ -f /opt/rpi-clock/clock.py ]]; then
 fi
 
 # If everything is already configured, skip most steps
-if [[ ${#MISSING_PACKAGES[@]} -eq 0 ]] && [[ "$SERVICES_CONFIGURED" == "true" ]] && [[ "$CONFIG_EXISTS" == "true" ]] && [[ "$GROUPS_CONFIGURED" == "true" ]] && i2c_enabled && [[ "$CLOCK_NEEDS_UPDATE" == "false" ]]; then
+if [[ ${#MISSING_PACKAGES[@]} -eq 0 ]] && [[ "$SERVICES_CONFIGURED" == "true" ]] && [[ "$CONFIG_FILES_EXIST" == "true" ]] && [[ "$GROUPS_CONFIGURED" == "true" ]] && i2c_enabled && [[ "$CLOCK_NEEDS_UPDATE" == "false" ]]; then
     echo -e "${GREEN}✓ System appears to be fully configured!${NC}"
     echo -e "${YELLOW}Skipping package installation and basic configuration...${NC}"
     SKIP_PACKAGES=true
@@ -454,63 +454,84 @@ else
     echo -e "${GREEN}✓ Chrony configuration already up to date${NC}"
 fi
 
-# Check if file installation is needed
-FILES_NEED_UPDATE=false
-if [[ ! -f /opt/rpi-clock/clock.py ]] || [[ ! -f /opt/rpi-clock/config.ini ]]; then
-    FILES_NEED_UPDATE=true
-fi
-
-# Check if clock.py has been updated (compare timestamps and content)
-if [[ -f clock.py ]] && [[ -f /opt/rpi-clock/clock.py ]]; then
-    # First check timestamps
-    if [[ clock.py -nt /opt/rpi-clock/clock.py ]]; then
-        FILES_NEED_UPDATE=true
-    fi
-    
-    # Also check if content differs (in case files were updated without timestamp change)
+# Check if clock.py needs updating (only file we should overwrite)
+CLOCK_NEEDS_UPDATE=false
+if [[ ! -f /opt/rpi-clock/clock.py ]]; then
+    CLOCK_NEEDS_UPDATE=true
+elif [[ -f clock.py ]] && [[ -f /opt/rpi-clock/clock.py ]]; then
+    # Check if content differs (in case files were updated without timestamp change)
     if ! diff -q clock.py /opt/rpi-clock/clock.py >/dev/null 2>&1; then
-        FILES_NEED_UPDATE=true
+        CLOCK_NEEDS_UPDATE=true
     fi
 fi
 
-# Check if other key files need updating
-for file in config.ini i2c-test.sh gps-test.sh ntp-test.sh; do
-    if [[ -f "$file" ]] && [[ -f "/opt/rpi-clock/$file" ]]; then
-        if ! diff -q "$file" "/opt/rpi-clock/$file" >/dev/null 2>&1; then
-            FILES_NEED_UPDATE=true
-        fi
+# Check if config.ini exists (preserve user's configuration)
+CONFIG_EXISTS=false
+if [[ -f /opt/rpi-clock/config.ini ]]; then
+    CONFIG_EXISTS=true
+fi
+
+# Check if other diagnostic scripts need updating (only if missing)
+SCRIPTS_NEED_UPDATE=false
+for file in i2c-test.sh gps-test.sh ntp-test.sh; do
+    if [[ ! -f "/opt/rpi-clock/$file" ]]; then
+        SCRIPTS_NEED_UPDATE=true
+        break
     fi
 done
 
-if [[ "$FILES_NEED_UPDATE" == "true" ]] || [[ "$SKIP_PACKAGES" == "false" ]]; then
+if [[ "$CLOCK_NEEDS_UPDATE" == "true" ]] || [[ "$CONFIG_EXISTS" == "false" ]] || [[ "$SCRIPTS_NEED_UPDATE" == "true" ]] || [[ "$SKIP_PACKAGES" == "false" ]]; then
     echo ""
     echo -e "${CYAN}Step 8: Installing RPI-Clock files...${NC}"
 
     # Create installation directory (idempotent)
     sudo mkdir -p /opt/rpi-clock
 
-    # Copy project files
-    echo "Installing RPI-Clock files..."
-    sudo cp clock.py /opt/rpi-clock/
-    sudo cp config.ini /opt/rpi-clock/
+    # Copy clock.py if it needs updating
+    if [[ "$CLOCK_NEEDS_UPDATE" == "true" ]]; then
+        echo "Updating clock.py..."
+        sudo cp clock.py /opt/rpi-clock/
+    else
+        echo -e "${GREEN}✓ clock.py already up to date${NC}"
+    fi
+
+    # Copy config.ini only if it doesn't exist (preserve user's configuration)
+    if [[ "$CONFIG_EXISTS" == "false" ]]; then
+        echo "Installing config.ini..."
+        sudo cp config.ini /opt/rpi-clock/
+        # Make config.ini editable by the user who ran the setup
+        sudo chown root:"$USER" /opt/rpi-clock/config.ini
+        sudo chmod 664 /opt/rpi-clock/config.ini
+    else
+        echo -e "${GREEN}✓ config.ini already exists (preserving user configuration)${NC}"
+    fi
+
+    # Copy optional files (only if they exist in source)
     sudo cp rpi-clock-logo.png /opt/rpi-clock/ 2>/dev/null || true
     sudo cp rpi-clock.gif /opt/rpi-clock/ 2>/dev/null || true
 
-    # Copy diagnostic scripts
-    sudo cp i2c-test.sh /opt/rpi-clock/
-    sudo cp gps-test.sh /opt/rpi-clock/
-    sudo cp ntp-test.sh /opt/rpi-clock/
+    # Copy diagnostic scripts only if missing
+    if [[ "$SCRIPTS_NEED_UPDATE" == "true" ]]; then
+        echo "Installing diagnostic scripts..."
+        sudo cp i2c-test.sh /opt/rpi-clock/ 2>/dev/null || true
+        sudo cp gps-test.sh /opt/rpi-clock/ 2>/dev/null || true
+        sudo cp ntp-test.sh /opt/rpi-clock/ 2>/dev/null || true
+    else
+        echo -e "${GREEN}✓ Diagnostic scripts already installed${NC}"
+    fi
 
     # Set proper permissions
     echo "Setting file permissions..."
     sudo chown -R root:root /opt/rpi-clock
     sudo chmod 755 /opt/rpi-clock
-    sudo chmod 644 /opt/rpi-clock/*.py /opt/rpi-clock/*.ini /opt/rpi-clock/*.png /opt/rpi-clock/*.gif
-    sudo chmod 755 /opt/rpi-clock/*.sh
+    sudo chmod 644 /opt/rpi-clock/*.py /opt/rpi-clock/*.ini /opt/rpi-clock/*.png /opt/rpi-clock/*.gif 2>/dev/null || true
+    sudo chmod 755 /opt/rpi-clock/*.sh 2>/dev/null || true
 
-    # Make config.ini editable by the user who ran the setup
-    sudo chown root:"$USER" /opt/rpi-clock/config.ini
-    sudo chmod 664 /opt/rpi-clock/config.ini
+    # Ensure config.ini has correct permissions if it exists
+    if [[ -f /opt/rpi-clock/config.ini ]]; then
+        sudo chown root:"$USER" /opt/rpi-clock/config.ini
+        sudo chmod 664 /opt/rpi-clock/config.ini
+    fi
     
     # If clock.py was updated, restart the service to pick up changes
     if [[ "$CLOCK_NEEDS_UPDATE" == "true" ]]; then
