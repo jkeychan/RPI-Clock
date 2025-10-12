@@ -466,6 +466,7 @@ display_duration = 3
 
 - **time_format**: `12` for 12-hour format, `24` for 24-hour format
 - **temp_unit**: `C` for Celsius, `F` for Fahrenheit
+- **smooth_scroll**: `true` for stock-ticker style scrolling (affects both weather and custom text), `false` for static display
 - **preferred_server**: `127.0.0.1` for local GPS time, or external NTP server
 - **Cycle settings**: Display duration in seconds for each metric (1-60 seconds)
 - **CustomText settings**:

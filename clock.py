@@ -512,22 +512,26 @@ def display_metric_with_message(
 
 def display_custom_text() -> None:
     """Display custom text with scrolling animation.
-
+    
     Uses the configured custom text and scrolls it across the display
-    for the configured duration.
+    for the configured duration. Respects the smooth_scroll setting.
     """
     if not display or not CUSTOM_TEXT_ENABLED or not CUSTOM_TEXT.strip():
         return
-
+    
     print(f"Displaying custom text: {CUSTOM_TEXT}")
-
-    # Clear display and scroll the custom text
-    display.fill(0)
-    display.marquee(CUSTOM_TEXT, delay=SCROLL_DELAY, loop=False)
-
+    
+    if SMOOTH_SCROLL:
+        # Use smooth scrolling with marquee
+        display.fill(0)
+        display.marquee(CUSTOM_TEXT, delay=SCROLL_DELAY, loop=False)
+    else:
+        # Use static display for the configured duration
+        write_display(CUSTOM_TEXT[:4])  # Show first 4 characters
+    
     # Wait for the configured duration
     time.sleep(CUSTOM_TEXT_DURATION)
-
+    
     # Invalidate cache since marquee wrote directly to display
     global last_display_text
     last_display_text = None
