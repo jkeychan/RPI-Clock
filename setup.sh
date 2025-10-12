@@ -116,8 +116,16 @@ if ! user_in_i2c_group || ! user_in_gpio_group; then
     GROUPS_CONFIGURED=false
 fi
 
+# Check if clock.py needs updating (even if everything else is configured)
+CLOCK_NEEDS_UPDATE=false
+if [[ -f clock.py ]] && [[ -f /opt/rpi-clock/clock.py ]]; then
+    if ! diff -q clock.py /opt/rpi-clock/clock.py >/dev/null 2>&1; then
+        CLOCK_NEEDS_UPDATE=true
+    fi
+fi
+
 # If everything is already configured, skip most steps
-if [[ ${#MISSING_PACKAGES[@]} -eq 0 ]] && [[ "$SERVICES_CONFIGURED" == "true" ]] && [[ "$CONFIG_EXISTS" == "true" ]] && [[ "$GROUPS_CONFIGURED" == "true" ]] && i2c_enabled; then
+if [[ ${#MISSING_PACKAGES[@]} -eq 0 ]] && [[ "$SERVICES_CONFIGURED" == "true" ]] && [[ "$CONFIG_EXISTS" == "true" ]] && [[ "$GROUPS_CONFIGURED" == "true" ]] && i2c_enabled && [[ "$CLOCK_NEEDS_UPDATE" == "false" ]]; then
     echo -e "${GREEN}✓ System appears to be fully configured!${NC}"
     echo -e "${YELLOW}Skipping package installation and basic configuration...${NC}"
     SKIP_PACKAGES=true
@@ -125,6 +133,9 @@ else
     echo -e "${YELLOW}System needs configuration updates.${NC}"
     if [[ ${#MISSING_PACKAGES[@]} -gt 0 ]]; then
         echo -e "${CYAN}Missing packages:${NC} ${MISSING_PACKAGES[*]}"
+    fi
+    if [[ "$CLOCK_NEEDS_UPDATE" == "true" ]]; then
+        echo -e "${CYAN}Clock.py needs updating${NC}"
     fi
     SKIP_PACKAGES=false
 fi
@@ -449,12 +460,27 @@ if [[ ! -f /opt/rpi-clock/clock.py ]] || [[ ! -f /opt/rpi-clock/config.ini ]]; t
     FILES_NEED_UPDATE=true
 fi
 
-# Check if clock.py has been updated (compare timestamps)
+# Check if clock.py has been updated (compare timestamps and content)
 if [[ -f clock.py ]] && [[ -f /opt/rpi-clock/clock.py ]]; then
+    # First check timestamps
     if [[ clock.py -nt /opt/rpi-clock/clock.py ]]; then
         FILES_NEED_UPDATE=true
     fi
+    
+    # Also check if content differs (in case files were updated without timestamp change)
+    if ! diff -q clock.py /opt/rpi-clock/clock.py >/dev/null 2>&1; then
+        FILES_NEED_UPDATE=true
+    fi
 fi
+
+# Check if other key files need updating
+for file in config.ini i2c-test.sh gps-test.sh ntp-test.sh; do
+    if [[ -f "$file" ]] && [[ -f "/opt/rpi-clock/$file" ]]; then
+        if ! diff -q "$file" "/opt/rpi-clock/$file" >/dev/null 2>&1; then
+            FILES_NEED_UPDATE=true
+        fi
+    fi
+done
 
 if [[ "$FILES_NEED_UPDATE" == "true" ]] || [[ "$SKIP_PACKAGES" == "false" ]]; then
     echo ""
@@ -485,6 +511,13 @@ if [[ "$FILES_NEED_UPDATE" == "true" ]] || [[ "$SKIP_PACKAGES" == "false" ]]; th
     # Make config.ini editable by the user who ran the setup
     sudo chown root:"$USER" /opt/rpi-clock/config.ini
     sudo chmod 664 /opt/rpi-clock/config.ini
+    
+    # If clock.py was updated, restart the service to pick up changes
+    if [[ "$CLOCK_NEEDS_UPDATE" == "true" ]]; then
+        echo -e "${YELLOW}Restarting rpi-clock service to pick up clock.py changes...${NC}"
+        sudo systemctl restart rpi-clock.service
+        echo -e "${GREEN}✓ rpi-clock service restarted${NC}"
+    fi
 else
     echo -e "${GREEN}✓ RPI-Clock files already up to date${NC}"
 fi
