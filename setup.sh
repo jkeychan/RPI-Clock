@@ -570,27 +570,6 @@ ExecStart=/usr/bin/python3 /opt/rpi-clock/clock.py
 ExecReload=/bin/kill -HUP \$MAINPID
 Restart=always
 RestartSec=10
-StartLimitInterval=60
-StartLimitBurst=3
-
-# Security settings
-NoNewPrivileges=true
-PrivateTmp=true
-ProtectSystem=strict
-ProtectHome=true
-ReadWritePaths=/opt/rpi-clock /tmp
-ProtectKernelTunables=true
-ProtectKernelModules=true
-ProtectControlGroups=true
-RestrictRealtime=true
-RestrictSUIDSGID=true
-MemoryDenyWriteExecute=true
-SystemCallFilter=@system-service
-SystemCallErrorNumber=EPERM
-
-# Resource limits
-LimitNOFILE=1024
-LimitNPROC=64
 
 # Logging
 StandardOutput=journal
