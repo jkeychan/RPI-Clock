@@ -326,9 +326,9 @@ def display_humidity(humidity: float) -> None:
     if not display:
         return
 
-    # Show humidity with "rH" prefix (e.g., "rH50" for 50% humidity)
-    # Since 7-segment display can't show '%', we use "rH" to indicate relative humidity
-    write_display(f"rH{int(round(humidity)):02d}")
+    # Show humidity as integer (e.g., "50" for 50% humidity)
+    # The "rH" prefix is handled by display_metric_with_message
+    write_display(f"{int(round(humidity)):02d}")
 
 
 def scroll_combined_label_value(
@@ -534,7 +534,8 @@ def main_loop() -> None:
                     display_metric_with_message(
                         'feel', display_temperature, feels_like, TEMP_UNIT)
                     time.sleep(FEELS_LIKE_DISPLAY)
-                    display_humidity(humidity)
+                    display_metric_with_message(
+                        'rH', display_humidity, humidity)
                     time.sleep(HUMIDITY_DISPLAY)
 
             cycle_counter = (cycle_counter + 1) % API_REFRESH_CYCLES
