@@ -5,6 +5,17 @@
 
 set -e  # Exit on any error
 
+# Define color codes for better terminal output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+PURPLE='\033[0;35m'
+CYAN='\033[0;36m'
+WHITE='\033[1;37m'
+BOLD='\033[1m'
+NC='\033[0m' # No Color
+
 echo "RPI-Clock Setup Script"
 echo "======================"
 echo ""
@@ -441,73 +452,73 @@ echo "Step 11: Validating installation..."
 
 # Validate GPS daemon is running
 if systemctl is-active --quiet gpsd.service; then
-    echo "✓ GPS daemon (gpsd) is running"
+    echo -e "${GREEN}✓ GPS daemon (gpsd) is running${NC}"
 else
-    echo "✗ GPS daemon (gpsd) is not running"
-    echo "  Run: sudo systemctl status gpsd.service"
+    echo -e "${RED}✗ GPS daemon (gpsd) is not running${NC}"
+    echo -e "  ${YELLOW}Run:${NC} ${GREEN}sudo systemctl status gpsd.service${NC}"
 fi
 
 # Validate chrony is running
 if systemctl is-active --quiet chrony.service; then
-    echo "✓ Chrony time synchronization is running"
+    echo -e "${GREEN}✓ Chrony time synchronization is running${NC}"
 else
-    echo "✗ Chrony time synchronization is not running"
-    echo "  Run: sudo systemctl status chrony.service"
+    echo -e "${RED}✗ Chrony time synchronization is not running${NC}"
+    echo -e "  ${YELLOW}Run:${NC} ${GREEN}sudo systemctl status chrony.service${NC}"
 fi
 
 # Validate RPI-Clock service is running
 if systemctl is-active --quiet rpi-clock.service; then
-    echo "✓ RPI-Clock service is running"
+    echo -e "${GREEN}✓ RPI-Clock service is running${NC}"
 else
-    echo "✗ RPI-Clock service is not running"
-    echo "  Run: sudo systemctl status rpi-clock.service"
+    echo -e "${RED}✗ RPI-Clock service is not running${NC}"
+    echo -e "  ${YELLOW}Run:${NC} ${GREEN}sudo systemctl status rpi-clock.service${NC}"
 fi
 
 # Validate GPS device exists
 if [[ -e /dev/ttyAMA0 ]]; then
-    echo "✓ GPS device /dev/ttyAMA0 exists"
+    echo -e "${GREEN}✓ GPS device /dev/ttyAMA0 exists${NC}"
 else
-    echo "✗ GPS device /dev/ttyAMA0 not found"
-    echo "  This may require a reboot to activate UART configuration"
+    echo -e "${RED}✗ GPS device /dev/ttyAMA0 not found${NC}"
+    echo -e "  ${YELLOW}This may require a reboot to activate UART configuration${NC}"
 fi
 
 # Validate PPS device exists
 if [[ -e /dev/pps0 ]]; then
-    echo "✓ PPS device /dev/pps0 exists"
+    echo -e "${GREEN}✓ PPS device /dev/pps0 exists${NC}"
 else
-    echo "✗ PPS device /dev/pps0 not found"
-    echo "  This may require a reboot to activate PPS configuration"
+    echo -e "${RED}✗ PPS device /dev/pps0 not found${NC}"
+    echo -e "  ${YELLOW}This may require a reboot to activate PPS configuration${NC}"
 fi
 
 # Validate I2C is enabled
 if i2c_enabled; then
-    echo "✓ I2C interface is enabled"
+    echo -e "${GREEN}✓ I2C interface is enabled${NC}"
 else
-    echo "✗ I2C interface is not enabled"
-    echo "  Run: sudo raspi-config nonint do_i2c 0"
+    echo -e "${RED}✗ I2C interface is not enabled${NC}"
+    echo -e "  ${YELLOW}Run:${NC} ${GREEN}sudo raspi-config nonint do_i2c 0${NC}"
 fi
 
 # Validate user groups
 if user_in_i2c_group; then
-    echo "✓ User is in i2c group"
+    echo -e "${GREEN}✓ User is in i2c group${NC}"
 else
-    echo "✗ User is not in i2c group"
-    echo "  Run: sudo usermod -a -G i2c $USER"
+    echo -e "${RED}✗ User is not in i2c group${NC}"
+    echo -e "  ${YELLOW}Run:${NC} ${GREEN}sudo usermod -a -G i2c $USER${NC}"
 fi
 
 if user_in_gpio_group; then
-    echo "✓ User is in gpio group"
+    echo -e "${GREEN}✓ User is in gpio group${NC}"
 else
-    echo "✗ User is not in gpio group"
-    echo "  Run: sudo usermod -a -G gpio $USER"
+    echo -e "${RED}✗ User is not in gpio group${NC}"
+    echo -e "  ${YELLOW}Run:${NC} ${GREEN}sudo usermod -a -G gpio $USER${NC}"
 fi
 
 echo ""
-echo "Setup completed successfully!"
+echo -e "${GREEN}${BOLD}Setup completed successfully!${NC}"
 echo ""
-echo "Services started:"
-echo "- GPS daemon (gpsd)"
-echo "- RPI-Clock service"
+echo -e "${CYAN}Services started:${NC}"
+echo -e "${WHITE}-${NC} ${GREEN}GPS daemon (gpsd)${NC}"
+echo -e "${WHITE}-${NC} ${GREEN}RPI-Clock service${NC}"
 # Check if reboot is needed
 REBOOT_NEEDED=false
 REBOOT_REASONS=()
@@ -530,54 +541,54 @@ fi
 
 if [[ "$REBOOT_NEEDED" == "true" ]]; then
     echo ""
-    echo "IMPORTANT: Reboot Required"
-    echo "=========================="
-    echo "The following changes require a reboot to activate:"
+    echo -e "${RED}${BOLD}IMPORTANT: Reboot Required${NC}"
+    echo -e "${RED}==========================${NC}"
+    echo -e "${YELLOW}The following changes require a reboot to activate:${NC}"
     for reason in "${REBOOT_REASONS[@]}"; do
-        echo "- $reason"
+        echo -e "${WHITE}-${NC} ${CYAN}$reason${NC}"
     done
     echo ""
-    echo "After reboot:"
-    echo "- The GPS HAT will be detected on /dev/ttyAMA0"
-    echo "- The 7-segment display should show the current time"
-    echo "- GPS time synchronization will be available"
+    echo -e "${GREEN}After reboot:${NC}"
+    echo -e "${WHITE}-${NC} The GPS HAT will be detected on ${GREEN}/dev/ttyAMA0${NC}"
+    echo -e "${WHITE}-${NC} The 7-segment display should show the current time"
+    echo -e "${WHITE}-${NC} GPS time synchronization will be available"
     echo ""
     if prompt_yes_no "Do you want to reboot now to activate all changes?"; then
-        echo "Rebooting in 5 seconds..."
+        echo -e "${YELLOW}Rebooting in 5 seconds...${NC}"
         sleep 5
         sudo reboot
     else
         echo ""
-        echo "Manual reboot required:"
-        echo "sudo reboot"
+        echo -e "${YELLOW}Manual reboot required:${NC}"
+        echo -e "${GREEN}sudo reboot${NC}"
         echo ""
-        echo "After reboot:"
-        echo "- GPS HAT will be available on /dev/ttyAMA0"
-        echo "- The 7-segment display should show the current time"
-        echo "- If the display is blank, check the troubleshooting guide in README.md"
+        echo -e "${GREEN}After reboot:${NC}"
+        echo -e "${WHITE}-${NC} GPS HAT will be available on ${GREEN}/dev/ttyAMA0${NC}"
+        echo -e "${WHITE}-${NC} The 7-segment display should show the current time"
+        echo -e "${WHITE}-${NC} If the display is blank, check the troubleshooting guide in ${BLUE}README.md${NC}"
     fi
 else
     echo ""
-    echo "All interfaces already configured - no reboot required!"
+    echo -e "${GREEN}✓ All interfaces already configured - no reboot required!${NC}"
 fi
 echo ""
-echo "Next steps after reboot:"
-echo "1. Edit config.ini with your OpenWeatherMap API key and ZIP code:"
-echo "   sudo nano /opt/rpi-clock/config.ini"
-echo "   - Replace 'XXXXXXXX' with your actual OpenWeatherMap API key"
-echo "   - Replace '90210' with your actual ZIP code"
-echo "2. Ensure your GPS antenna has a clear view of the sky"
-echo "3. Test GPS connection: cgps -s"
-echo "4. Check GPS HAT detection: ls -la /dev/ttyAMA*"
-echo "5. Check chrony sources: chronyc sources"
-echo "6. Check clock status: sudo systemctl status rpi-clock"
-echo "7. View clock logs: sudo journalctl -u rpi-clock -f"
+echo -e "${CYAN}${BOLD}Next steps after reboot:${NC}"
+echo -e "${WHITE}1.${NC} ${YELLOW}Edit config.ini with your OpenWeatherMap API key and ZIP code:${NC}"
+echo -e "   ${GREEN}sudo nano /opt/rpi-clock/config.ini${NC}"
+echo -e "   ${WHITE}-${NC} Replace ${RED}'XXXXXXXX'${NC} with your actual ${BLUE}OpenWeatherMap API key${NC}"
+echo -e "   ${WHITE}-${NC} Replace ${RED}'90210'${NC} with your actual ${BLUE}ZIP code${NC}"
+echo -e "${WHITE}2.${NC} ${YELLOW}Ensure your GPS antenna has a clear view of the sky${NC}"
+echo -e "${WHITE}3.${NC} ${YELLOW}Test GPS connection:${NC} ${GREEN}cgps -s${NC}"
+echo -e "${WHITE}4.${NC} ${YELLOW}Check GPS HAT detection:${NC} ${GREEN}ls -la /dev/ttyAMA*${NC}"
+echo -e "${WHITE}5.${NC} ${YELLOW}Check chrony sources:${NC} ${GREEN}chronyc sources${NC}"
+echo -e "${WHITE}6.${NC} ${YELLOW}Check clock status:${NC} ${GREEN}sudo systemctl status rpi-clock${NC}"
+echo -e "${WHITE}7.${NC} ${YELLOW}View clock logs:${NC} ${GREEN}sudo journalctl -u rpi-clock -f${NC}"
 echo ""
-echo "IMPORTANT: The clock will not display weather data until you:"
-echo "- Get a free API key from https://openweathermap.org/api_keys/"
-echo "- Update /opt/rpi-clock/config.ini with your API key and ZIP code"
-echo "- Restart the service: sudo systemctl restart rpi-clock"
+echo -e "${RED}${BOLD}IMPORTANT:${NC} ${YELLOW}The clock will not display weather data until you:${NC}"
+echo -e "${WHITE}-${NC} Get a free API key from ${BLUE}https://openweathermap.org/api_keys/${NC}"
+echo -e "${WHITE}-${NC} Update ${GREEN}/opt/rpi-clock/config.ini${NC} with your API key and ZIP code"
+echo -e "${WHITE}-${NC} Restart the service: ${GREEN}sudo systemctl restart rpi-clock${NC}"
 echo ""
-echo "The clock will automatically start on boot."
-echo "GPS HAT will be available on /dev/ttyAMA0 after reboot."
-echo "For troubleshooting, see the README.md file."
+echo -e "${GREEN}✓${NC} The clock will automatically start on boot."
+echo -e "${GREEN}✓${NC} GPS HAT will be available on ${GREEN}/dev/ttyAMA0${NC} after reboot."
+echo -e "${CYAN}ℹ${NC} For troubleshooting, see the ${BLUE}README.md${NC} file."
