@@ -139,23 +139,43 @@ else
 fi
 
 echo ""
-echo "Step 8: Checking chrony GPS integration..."
+echo "Step 8: Checking GPSD configuration..."
+echo "------------------------------------"
+if [[ -f /etc/default/gpsd ]]; then
+    echo "GPSD configuration:"
+    cat /etc/default/gpsd | grep -E "(DEVICES|GPSD_OPTIONS|USBAUTO)" || echo "No GPSD configuration found"
+else
+    echo "✗ GPSD configuration file not found"
+fi
+
+echo ""
+echo "Step 9: Checking chrony GPS integration..."
 echo "------------------------------------------"
 if command_exists chronyc; then
     echo "Checking chrony sources..."
-    chronyc sources | grep -E "(GPS|SHM)" || echo "No GPS sources found in chrony"
+    sudo chronyc sources | grep -E "(GPS|SHM)" || echo "No GPS sources found in chrony"
     
     echo ""
     echo "Checking chrony tracking..."
-    chronyc tracking | head -5
+    sudo chronyc tracking | head -5
+    
+    echo ""
+    echo "Checking GPSD shared memory segments..."
+    if command_exists ntpshmmon; then
+        echo "GPSD SHM data (first 3 samples):"
+        sudo ntpshmmon | head -4
+    else
+        echo "✗ ntpshmmon not available"
+        echo "  Run: sudo apt install gpsd-clients"
+    fi
 else
     echo "✗ chronyc not available"
     echo "  Run: sudo apt install chrony"
 fi
 
 echo ""
-echo "Step 9: Checking system time synchronization..."
-echo "---------------------------------------------"
+echo "Step 10: Checking system time synchronization..."
+echo "----------------------------------------------"
 echo "System time: $(date)"
 echo "UTC time: $(date -u)"
 echo "Timezone: $(timedatectl show --property=Timezone --value 2>/dev/null || echo 'Unknown')"

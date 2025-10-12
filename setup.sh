@@ -159,6 +159,13 @@ else
     echo "chrony already installed"
 fi
 
+# Install PPS tools for GPS precision timing
+if ! package_installed pps-tools; then
+    sudo apt install -y pps-tools
+else
+    echo "pps-tools already installed"
+fi
+
 echo ""
 echo "Step 5: Configuring I2C interface for display..."
 
@@ -190,6 +197,14 @@ if grep -q "dtoverlay=disable-bt" /boot/firmware/config.txt; then
 else
     echo "Disabling Bluetooth to free UART for GPS HAT..."
     sudo sed -i '/enable_uart=1/a dtoverlay=disable-bt' /boot/firmware/config.txt
+fi
+
+# Enable PPS overlay for GPS precision timing
+if grep -q "dtoverlay=pps-gpio" /boot/firmware/config.txt; then
+    echo "PPS overlay already enabled"
+else
+    echo "Enabling PPS overlay for GPS precision timing..."
+    sudo sed -i '/dtoverlay=disable-bt/a dtoverlay=pps-gpio,gpiopin=4' /boot/firmware/config.txt
 fi
 
 # Install I2C tools
@@ -239,7 +254,7 @@ After=network.target
 
 [Service]
 Type=simple
-ExecStart=/usr/sbin/gpsd -N -n /dev/ttyAMA0
+ExecStart=/usr/sbin/gpsd -N -n /dev/ttyAMA0 /dev/pps0
 Restart=always
 RestartSec=5
 User=gpsd
@@ -247,6 +262,20 @@ Group=dialout
 
 [Install]
 WantedBy=multi-user.target
+EOF
+
+# Configure GPSD defaults
+echo "Configuring GPSD defaults..."
+sudo tee /etc/default/gpsd > /dev/null <<EOF
+# Devices gpsd should collect to at boot time.
+# They need to be read/writeable, either by user gpsd or the group dialout.
+DEVICES="/dev/ttyAMA0 /dev/pps0"
+
+# Other options you want to pass to gpsd
+GPSD_OPTIONS="-n"
+
+# Automatically hot add/remove USB GPS devices via gpsdctl
+USBAUTO="false"
 EOF
 
 # Enable and start gpsd (idempotent)
@@ -405,10 +434,10 @@ if ! user_in_gpio_group; then
     REBOOT_REASONS+=("User added to GPIO group")
 fi
 
-# Check if UART was enabled or Bluetooth disabled
-if ! grep -q "enable_uart=1" /boot/firmware/config.txt || ! grep -q "dtoverlay=disable-bt" /boot/firmware/config.txt; then
+# Check if UART was enabled, Bluetooth disabled, or PPS overlay added
+if ! grep -q "enable_uart=1" /boot/firmware/config.txt || ! grep -q "dtoverlay=disable-bt" /boot/firmware/config.txt || ! grep -q "dtoverlay=pps-gpio" /boot/firmware/config.txt; then
     REBOOT_NEEDED=true
-    REBOOT_REASONS+=("UART enabled and Bluetooth disabled for GPS HAT")
+    REBOOT_REASONS+=("UART enabled, Bluetooth disabled, and PPS overlay added for GPS HAT")
 fi
 
 if [[ "$REBOOT_NEEDED" == "true" ]]; then

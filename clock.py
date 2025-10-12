@@ -102,7 +102,8 @@ def validate_config() -> bool:
             if brightness_val < 0.0 or brightness_val > 1.0:
                 errors.append("BRIGHTNESS must be between 0.0 and 1.0")
         except (ValueError, TypeError):
-            errors.append("BRIGHTNESS must be a valid number between 0.0 and 1.0")
+            errors.append(
+                "BRIGHTNESS must be a valid number between 0.0 and 1.0")
 
     # Validate Cycle section
     if config.has_section('Cycle'):
@@ -188,7 +189,8 @@ def initialize_display() -> bool:
         i2c = busio.I2C(board.SCL, board.SDA)
         display = segments.Seg7x4(i2c)
         display.brightness = BRIGHTNESS
-        print(f"✓ 7-segment display initialized successfully (brightness: {BRIGHTNESS})")
+        print(
+            f"✓ 7-segment display initialized successfully (brightness: {BRIGHTNESS})")
         return True
     except busio.I2CError as e:
         print(f"✗ I2C communication error: {e}")
