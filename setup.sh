@@ -84,203 +84,287 @@ user_in_gpio_group() {
     groups "$USER" | grep -q gpio
 }
 
+# Quick check if everything is already installed and configured
 echo ""
-echo "Step 1: Updating package lists..."
-sudo apt update
+echo -e "${CYAN}Checking if system is already configured...${NC}"
 
-echo ""
-echo "Step 2: Installing Python dependencies..."
-if ! package_installed python3-pip; then
-    sudo apt install -y python3-pip
-else
-    echo "python3-pip already installed"
+# Check if all required packages are installed
+REQUIRED_PACKAGES=("python3-pip" "python3-requests" "python3-ntplib" "gpsd" "gpsd-clients" "chrony" "pps-tools" "i2c-tools" "shellcheck")
+MISSING_PACKAGES=()
+
+for package in "${REQUIRED_PACKAGES[@]}"; do
+    if ! package_installed "$package"; then
+        MISSING_PACKAGES+=("$package")
+    fi
+done
+
+# Check if services are already configured
+SERVICES_CONFIGURED=true
+if [[ ! -f /etc/systemd/system/rpi-clock.service ]] || [[ ! -f /etc/systemd/system/gpsd.service ]]; then
+    SERVICES_CONFIGURED=false
 fi
 
-# Check and install Python packages
-echo "Installing Python packages via apt (system-wide)..."
-if ! package_installed python3-requests; then
-    sudo apt install -y python3-requests
-else
-    echo "python3-requests already installed"
+# Check if config files exist
+CONFIG_EXISTS=true
+if [[ ! -f /opt/rpi-clock/clock.py ]] || [[ ! -f /opt/rpi-clock/config.ini ]]; then
+    CONFIG_EXISTS=false
 fi
 
-if ! package_installed python3-ntplib; then
-    sudo apt install -y python3-ntplib
-else
-    echo "python3-ntplib already installed"
+# Check if I2C and GPIO groups are set up
+GROUPS_CONFIGURED=true
+if ! user_in_i2c_group || ! user_in_gpio_group; then
+    GROUPS_CONFIGURED=false
 fi
 
-# Install Adafruit packages via pip (not available in apt)
-echo "Installing Adafruit CircuitPython packages..."
-if ! python_module_available board; then
-    echo "Installing adafruit-blinka..."
-    pip3 install --user adafruit-blinka 2>/dev/null || echo "adafruit-blinka installation skipped (externally managed environment)"
+# If everything is already configured, skip most steps
+if [[ ${#MISSING_PACKAGES[@]} -eq 0 ]] && [[ "$SERVICES_CONFIGURED" == "true" ]] && [[ "$CONFIG_EXISTS" == "true" ]] && [[ "$GROUPS_CONFIGURED" == "true" ]] && i2c_enabled; then
+    echo -e "${GREEN}✓ System appears to be fully configured!${NC}"
+    echo -e "${YELLOW}Skipping package installation and basic configuration...${NC}"
+    SKIP_PACKAGES=true
 else
-    echo "adafruit-blinka already installed"
+    echo -e "${YELLOW}System needs configuration updates.${NC}"
+    if [[ ${#MISSING_PACKAGES[@]} -gt 0 ]]; then
+        echo -e "${CYAN}Missing packages:${NC} ${MISSING_PACKAGES[*]}"
+    fi
+    SKIP_PACKAGES=false
 fi
 
-if ! python_module_available adafruit_ht16k33; then
-    echo "Installing adafruit-circuitpython-ht16k33..."
-    pip3 install --user adafruit-circuitpython-ht16k33 2>/dev/null || echo "adafruit-circuitpython-ht16k33 installation skipped (externally managed environment)"
+if [[ "$SKIP_PACKAGES" == "false" ]]; then
+    echo ""
+    echo -e "${CYAN}Step 1: Updating package lists...${NC}"
+    sudo apt update
 else
-    echo "adafruit-circuitpython-ht16k33 already installed"
+    echo -e "${GREEN}✓ Package lists already up to date${NC}"
 fi
 
-# Install development tools (optional - may fail on externally managed environments)
-echo "Installing Python development tools..."
-if ! python_module_available flake8; then
-    echo "Attempting to install flake8 (may fail on externally managed environments)..."
-    pip3 install --user flake8 2>/dev/null || echo "flake8 installation skipped (externally managed environment)"
+if [[ "$SKIP_PACKAGES" == "false" ]]; then
+    echo ""
+    echo -e "${CYAN}Step 2: Installing Python dependencies...${NC}"
+    if ! package_installed python3-pip; then
+        sudo apt install -y python3-pip
+    else
+        echo -e "${GREEN}✓ python3-pip already installed${NC}"
+    fi
+
+    # Check and install Python packages
+    echo -e "${CYAN}Installing Python packages via apt (system-wide)...${NC}"
+    if ! package_installed python3-requests; then
+        sudo apt install -y python3-requests
+    else
+        echo -e "${GREEN}✓ python3-requests already installed${NC}"
+    fi
+
+    if ! package_installed python3-ntplib; then
+        sudo apt install -y python3-ntplib
+    else
+        echo -e "${GREEN}✓ python3-ntplib already installed${NC}"
+    fi
+
+    # Install Adafruit packages via pip (not available in apt)
+    echo -e "${CYAN}Installing Adafruit CircuitPython packages...${NC}"
+    if ! python_module_available board; then
+        echo "Installing adafruit-blinka..."
+        pip3 install --user adafruit-blinka 2>/dev/null || echo "adafruit-blinka installation skipped (externally managed environment)"
+    else
+        echo -e "${GREEN}✓ adafruit-blinka already installed${NC}"
+    fi
+
+    if ! python_module_available adafruit_ht16k33; then
+        echo "Installing adafruit-circuitpython-ht16k33..."
+        pip3 install --user adafruit-circuitpython-ht16k33 2>/dev/null || echo "adafruit-circuitpython-ht16k33 installation skipped (externally managed environment)"
+    else
+        echo -e "${GREEN}✓ adafruit-circuitpython-ht16k33 already installed${NC}"
+    fi
+
+    # Install development tools (optional - may fail on externally managed environments)
+    echo -e "${CYAN}Installing Python development tools...${NC}"
+    if ! python_module_available flake8; then
+        echo "Attempting to install flake8 (may fail on externally managed environments)..."
+        pip3 install --user flake8 2>/dev/null || echo "flake8 installation skipped (externally managed environment)"
+    else
+        echo -e "${GREEN}✓ flake8 already installed${NC}"
+    fi
+
+    # Install shellcheck for bash script validation
+    if ! command_exists shellcheck; then
+        echo "Installing shellcheck for bash script validation..."
+        sudo apt install -y shellcheck
+    else
+        echo -e "${GREEN}✓ shellcheck already installed${NC}"
+    fi
+
+    # Also install for root (needed for systemd service)
+    echo -e "${CYAN}Installing Adafruit packages for root user...${NC}"
+    if ! sudo python3 -c "import board" 2>/dev/null; then
+        echo "Installing adafruit-blinka for root..."
+        sudo pip3 install adafruit-blinka 2>/dev/null || echo "adafruit-blinka root installation skipped (externally managed environment)"
+    else
+        echo -e "${GREEN}✓ adafruit-blinka already installed for root${NC}"
+    fi
+
+    if ! sudo python3 -c "import adafruit_ht16k33" 2>/dev/null; then
+        echo "Installing adafruit-circuitpython-ht16k33 for root..."
+        sudo pip3 install adafruit-circuitpython-ht16k33 2>/dev/null || echo "adafruit-circuitpython-ht16k33 root installation skipped (externally managed environment)"
+    else
+        echo -e "${GREEN}✓ adafruit-circuitpython-ht16k33 already installed for root${NC}"
+    fi
 else
-    echo "flake8 already installed"
+    echo -e "${GREEN}✓ All Python dependencies already installed${NC}"
 fi
 
-# Install shellcheck for bash script validation
-if ! command_exists shellcheck; then
-    echo "Installing shellcheck for bash script validation..."
-    sudo apt install -y shellcheck
+if [[ "$SKIP_PACKAGES" == "false" ]]; then
+    echo ""
+    echo -e "${CYAN}Step 3: Installing GPS daemon and clients...${NC}"
+    if ! package_installed gpsd; then
+        sudo apt install -y gpsd gpsd-clients
+    else
+        echo -e "${GREEN}✓ gpsd already installed${NC}"
+    fi
+
+    echo ""
+    echo -e "${CYAN}Step 4: Installing time synchronization software...${NC}"
+    if ! package_installed chrony; then
+        sudo apt install -y chrony
+    else
+        echo -e "${GREEN}✓ chrony already installed${NC}"
+    fi
+
+    # Install PPS tools for GPS precision timing
+    if ! package_installed pps-tools; then
+        sudo apt install -y pps-tools
+    else
+        echo -e "${GREEN}✓ pps-tools already installed${NC}"
+    fi
 else
-    echo "shellcheck already installed"
+    echo -e "${GREEN}✓ GPS daemon and time sync software already installed${NC}"
 fi
 
-# Also install for root (needed for systemd service)
-echo "Installing Adafruit packages for root user..."
-if ! sudo python3 -c "import board" 2>/dev/null; then
-    echo "Installing adafruit-blinka for root..."
-    sudo pip3 install adafruit-blinka 2>/dev/null || echo "adafruit-blinka root installation skipped (externally managed environment)"
-else
-    echo "adafruit-blinka already installed for root"
-fi
-
-if ! sudo python3 -c "import adafruit_ht16k33" 2>/dev/null; then
-    echo "Installing adafruit-circuitpython-ht16k33 for root..."
-    sudo pip3 install adafruit-circuitpython-ht16k33 2>/dev/null || echo "adafruit-circuitpython-ht16k33 root installation skipped (externally managed environment)"
-else
-    echo "adafruit-circuitpython-ht16k33 already installed for root"
-fi
-
-echo ""
-echo "Step 3: Installing GPS daemon and clients..."
-if ! package_installed gpsd; then
-    sudo apt install -y gpsd gpsd-clients
-else
-    echo "gpsd already installed"
-fi
-
-echo ""
-echo "Step 4: Installing time synchronization software..."
-if ! package_installed chrony; then
-    sudo apt install -y chrony
-else
-    echo "chrony already installed"
-fi
-
-# Install PPS tools for GPS precision timing
-if ! package_installed pps-tools; then
-    sudo apt install -y pps-tools
-else
-    echo "pps-tools already installed"
-fi
-
-echo ""
-echo "Step 5: Configuring I2C interface for display..."
-
-# Check if I2C is already enabled
+# Check if hardware configuration is needed
+HARDWARE_CONFIG_NEEDED=false
 I2C_WAS_ENABLED=true
-if i2c_enabled; then
-    echo "I2C interface already enabled"
-else
-    echo "Enabling I2C interface..."
-    sudo raspi-config nonint do_i2c 0
+
+if ! i2c_enabled; then
+    HARDWARE_CONFIG_NEEDED=true
     I2C_WAS_ENABLED=false
 fi
 
-# Configure serial port (disable login shell, enable hardware)
-sudo raspi-config nonint do_serial 1
+if ! grep -q "enable_uart=1" /boot/firmware/config.txt || ! grep -q "dtoverlay=disable-bt" /boot/firmware/config.txt || ! grep -q "dtoverlay=pps-gpio" /boot/firmware/config.txt; then
+    HARDWARE_CONFIG_NEEDED=true
+fi
 
-# Configure UART for GPS HAT
-echo "Configuring UART interface for GPS HAT..."
-if grep -q "enable_uart=1" /boot/firmware/config.txt; then
-    echo "UART already enabled"
+if ! user_in_i2c_group || ! user_in_gpio_group; then
+    HARDWARE_CONFIG_NEEDED=true
+fi
+
+if [[ "$HARDWARE_CONFIG_NEEDED" == "true" ]] || [[ "$SKIP_PACKAGES" == "false" ]]; then
+    echo ""
+    echo -e "${CYAN}Step 5: Configuring I2C interface for display...${NC}"
+
+    # Check if I2C is already enabled
+    if i2c_enabled; then
+        echo -e "${GREEN}✓ I2C interface already enabled${NC}"
+    else
+        echo "Enabling I2C interface..."
+        sudo raspi-config nonint do_i2c 0
+        I2C_WAS_ENABLED=false
+    fi
+
+    # Configure serial port (disable login shell, enable hardware)
+    sudo raspi-config nonint do_serial 1
+
+    # Configure UART for GPS HAT
+    echo "Configuring UART interface for GPS HAT..."
+    if grep -q "enable_uart=1" /boot/firmware/config.txt; then
+        echo -e "${GREEN}✓ UART already enabled${NC}"
+    else
+        echo "Enabling UART interface..."
+        sudo sed -i 's/enable_uart=0/enable_uart=1/' /boot/firmware/config.txt
+    fi
+
+    # Disable Bluetooth to free up UART for GPS HAT
+    if grep -q "dtoverlay=disable-bt" /boot/firmware/config.txt; then
+        echo -e "${GREEN}✓ Bluetooth already disabled for GPS HAT${NC}"
+    else
+        echo "Disabling Bluetooth to free UART for GPS HAT..."
+        sudo sed -i '/enable_uart=1/a dtoverlay=disable-bt' /boot/firmware/config.txt
+    fi
+
+    # Enable PPS overlay for GPS precision timing
+    if grep -q "dtoverlay=pps-gpio" /boot/firmware/config.txt; then
+        echo -e "${GREEN}✓ PPS overlay already enabled${NC}"
+    else
+        echo "Enabling PPS overlay for GPS precision timing..."
+        sudo sed -i '/dtoverlay=disable-bt/a dtoverlay=pps-gpio,gpiopin=18' /boot/firmware/config.txt
+    fi
+
+    # Load PPS modules for GPS precision timing
+    echo "Loading PPS modules..."
+    if ! lsmod | grep -q pps_ldisc; then
+        echo "Loading pps_ldisc module..."
+        sudo modprobe pps_ldisc
+    else
+        echo -e "${GREEN}✓ pps_ldisc module already loaded${NC}"
+    fi
+
+    # Add pps_ldisc to modules for auto-loading at boot
+    if ! grep -q "pps_ldisc" /etc/modules; then
+        echo "Adding pps_ldisc to /etc/modules for auto-loading..."
+        echo "pps_ldisc" | sudo tee -a /etc/modules
+    else
+        echo -e "${GREEN}✓ pps_ldisc already in /etc/modules${NC}"
+    fi
+
+    # Install I2C tools
+    if ! package_installed i2c-tools; then
+        sudo apt install -y i2c-tools
+    else
+        echo -e "${GREEN}✓ i2c-tools already installed${NC}"
+    fi
+
+    # Add user to i2c group
+    if user_in_i2c_group; then
+        echo -e "${GREEN}✓ User already in i2c group${NC}"
+    else
+        echo "Adding user to i2c group..."
+        sudo usermod -a -G i2c "$USER"
+    fi
+
+    # Add user to gpio group
+    if user_in_gpio_group; then
+        echo -e "${GREEN}✓ User already in gpio group${NC}"
+    else
+        echo "Adding user to gpio group..."
+        sudo usermod -a -G gpio "$USER"
+    fi
+
+    echo -e "${GREEN}✓ I2C and GPIO interfaces configured successfully!${NC}"
 else
-    echo "Enabling UART interface..."
-    sudo sed -i 's/enable_uart=0/enable_uart=1/' /boot/firmware/config.txt
+    echo -e "${GREEN}✓ I2C and GPIO interfaces already configured${NC}"
 fi
 
-# Disable Bluetooth to free up UART for GPS HAT
-if grep -q "dtoverlay=disable-bt" /boot/firmware/config.txt; then
-    echo "Bluetooth already disabled for GPS HAT"
-else
-    echo "Disabling Bluetooth to free UART for GPS HAT..."
-    sudo sed -i '/enable_uart=1/a dtoverlay=disable-bt' /boot/firmware/config.txt
+# Check if GPS daemon configuration is needed
+GPS_CONFIG_NEEDED=false
+if [[ ! -f /etc/systemd/system/gpsd.service ]] || [[ ! -f /etc/default/gpsd ]]; then
+    GPS_CONFIG_NEEDED=true
 fi
 
-# Enable PPS overlay for GPS precision timing
-if grep -q "dtoverlay=pps-gpio" /boot/firmware/config.txt; then
-    echo "PPS overlay already enabled"
-else
-    echo "Enabling PPS overlay for GPS precision timing..."
-    sudo sed -i '/dtoverlay=disable-bt/a dtoverlay=pps-gpio,gpiopin=18' /boot/firmware/config.txt
-fi
+if [[ "$GPS_CONFIG_NEEDED" == "true" ]] || [[ "$SKIP_PACKAGES" == "false" ]]; then
+    echo ""
+    echo -e "${CYAN}Step 6: Configuring GPS daemon...${NC}"
 
-# Load PPS modules for GPS precision timing
-echo "Loading PPS modules..."
-if ! lsmod | grep -q pps_ldisc; then
-    echo "Loading pps_ldisc module..."
-    sudo modprobe pps_ldisc
-else
-    echo "pps_ldisc module already loaded"
-fi
+    # Stop and disable default gpsd service (idempotent)
+    echo "Configuring GPS daemon..."
+    if systemctl is-active --quiet gpsd.socket; then
+        echo "Stopping default gpsd.socket service..."
+        sudo systemctl stop gpsd.socket
+    fi
+    if systemctl is-enabled --quiet gpsd.socket; then
+        echo "Disabling default gpsd.socket service..."
+        sudo systemctl disable gpsd.socket
+    fi
 
-# Add pps_ldisc to modules for auto-loading at boot
-if ! grep -q "pps_ldisc" /etc/modules; then
-    echo "Adding pps_ldisc to /etc/modules for auto-loading..."
-    echo "pps_ldisc" | sudo tee -a /etc/modules
-else
-    echo "pps_ldisc already in /etc/modules"
-fi
-
-# Install I2C tools
-if ! package_installed i2c-tools; then
-    sudo apt install -y i2c-tools
-else
-    echo "i2c-tools already installed"
-fi
-
-# Add user to i2c group
-if user_in_i2c_group; then
-    echo "User already in i2c group"
-else
-    echo "Adding user to i2c group..."
-    sudo usermod -a -G i2c "$USER"
-fi
-
-# Add user to gpio group
-if user_in_gpio_group; then
-    echo "User already in gpio group"
-else
-    echo "Adding user to gpio group..."
-    sudo usermod -a -G gpio "$USER"
-fi
-
-echo "I2C and GPIO interfaces configured successfully!"
-
-echo ""
-echo "Step 6: Configuring GPS daemon..."
-
-# Stop and disable default gpsd service (idempotent)
-echo "Configuring GPS daemon..."
-if systemctl is-active --quiet gpsd.socket; then
-    echo "Stopping default gpsd.socket service..."
-    sudo systemctl stop gpsd.socket
-fi
-if systemctl is-enabled --quiet gpsd.socket; then
-    echo "Disabling default gpsd.socket service..."
-    sudo systemctl disable gpsd.socket
-fi
-
-# Create gpsd service file
-sudo tee /etc/systemd/system/gpsd.service > /dev/null <<EOF
+    # Create gpsd service file
+    sudo tee /etc/systemd/system/gpsd.service > /dev/null <<EOF
 [Unit]
 Description=GPS daemon
 After=network.target
@@ -297,9 +381,9 @@ Group=dialout
 WantedBy=multi-user.target
 EOF
 
-# Configure GPSD defaults
-echo "Configuring GPSD defaults..."
-sudo tee /etc/default/gpsd > /dev/null <<EOF
+    # Configure GPSD defaults
+    echo "Configuring GPSD defaults..."
+    sudo tee /etc/default/gpsd > /dev/null <<EOF
 # Devices gpsd should collect to at boot time.
 # They need to be read/writeable, either by user gpsd or the group dialout.
 DEVICES="/dev/ttyAMA0 /dev/pps0"
@@ -311,68 +395,112 @@ GPSD_OPTIONS="-n"
 USBAUTO="false"
 EOF
 
-# Enable and start gpsd (idempotent)
-sudo systemctl daemon-reload
-if ! systemctl is-enabled --quiet gpsd.service; then
-    echo "Enabling gpsd.service..."
-    sudo systemctl enable gpsd.service
+    # Enable and start gpsd (idempotent)
+    sudo systemctl daemon-reload
+    if ! systemctl is-enabled --quiet gpsd.service; then
+        echo "Enabling gpsd.service..."
+        sudo systemctl enable gpsd.service
+    else
+        echo -e "${GREEN}✓ gpsd.service already enabled${NC}"
+    fi
 else
-    echo "gpsd.service already enabled"
+    echo -e "${GREEN}✓ GPS daemon already configured${NC}"
 fi
 
-echo ""
-echo "Step 7: Configuring chrony for GPS time synchronization..."
-
-# Backup original chrony.conf (idempotent)
+# Check if chrony configuration is needed
+CHRONY_CONFIG_NEEDED=false
 if [[ ! -f /etc/chrony/chrony.conf.backup ]]; then
-    echo "Backing up original chrony.conf..."
-    sudo cp /etc/chrony/chrony.conf /etc/chrony/chrony.conf.backup
-else
-    echo "chrony.conf backup already exists"
+    CHRONY_CONFIG_NEEDED=true
 fi
 
-# Install optimized chrony configuration
-echo "Installing optimized chrony configuration..."
-sudo cp chrony.conf /etc/chrony/chrony.conf
+# Check if chrony.conf needs updating (compare with our version)
+if [[ -f chrony.conf ]] && [[ -f /etc/chrony/chrony.conf ]]; then
+    if ! diff -q chrony.conf /etc/chrony/chrony.conf >/dev/null 2>&1; then
+        CHRONY_CONFIG_NEEDED=true
+    fi
+fi
 
-# Restart chrony
-echo "Restarting chrony service..."
-sudo systemctl restart chrony
+if [[ "$CHRONY_CONFIG_NEEDED" == "true" ]] || [[ "$SKIP_PACKAGES" == "false" ]]; then
+    echo ""
+    echo -e "${CYAN}Step 7: Configuring chrony for GPS time synchronization...${NC}"
 
-echo ""
-echo "Step 8: Installing RPI-Clock files..."
+    # Backup original chrony.conf (idempotent)
+    if [[ ! -f /etc/chrony/chrony.conf.backup ]]; then
+        echo "Backing up original chrony.conf..."
+        sudo cp /etc/chrony/chrony.conf /etc/chrony/chrony.conf.backup
+    else
+        echo -e "${GREEN}✓ chrony.conf backup already exists${NC}"
+    fi
 
-# Create installation directory (idempotent)
-sudo mkdir -p /opt/rpi-clock
+    # Install optimized chrony configuration
+    echo "Installing optimized chrony configuration..."
+    sudo cp chrony.conf /etc/chrony/chrony.conf
 
-# Copy project files
-echo "Installing RPI-Clock files..."
-sudo cp clock.py /opt/rpi-clock/
-sudo cp config.ini /opt/rpi-clock/
-sudo cp rpi-clock-logo.png /opt/rpi-clock/ 2>/dev/null || true
-sudo cp rpi-clock.gif /opt/rpi-clock/ 2>/dev/null || true
+    # Restart chrony
+    echo "Restarting chrony service..."
+    sudo systemctl restart chrony
+else
+    echo -e "${GREEN}✓ Chrony configuration already up to date${NC}"
+fi
 
-# Copy diagnostic scripts
-sudo cp i2c-test.sh /opt/rpi-clock/
-sudo cp gps-test.sh /opt/rpi-clock/
-sudo cp ntp-test.sh /opt/rpi-clock/
+# Check if file installation is needed
+FILES_NEED_UPDATE=false
+if [[ ! -f /opt/rpi-clock/clock.py ]] || [[ ! -f /opt/rpi-clock/config.ini ]]; then
+    FILES_NEED_UPDATE=true
+fi
 
-# Set proper permissions
-echo "Setting file permissions..."
-sudo chown -R root:root /opt/rpi-clock
-sudo chmod 755 /opt/rpi-clock
-sudo chmod 644 /opt/rpi-clock/*.py /opt/rpi-clock/*.ini /opt/rpi-clock/*.png /opt/rpi-clock/*.gif
-sudo chmod 755 /opt/rpi-clock/*.sh
+# Check if clock.py has been updated (compare timestamps)
+if [[ -f clock.py ]] && [[ -f /opt/rpi-clock/clock.py ]]; then
+    if [[ clock.py -nt /opt/rpi-clock/clock.py ]]; then
+        FILES_NEED_UPDATE=true
+    fi
+fi
 
-# Make config.ini editable by the user who ran the setup
-sudo chown root:"$USER" /opt/rpi-clock/config.ini
-sudo chmod 664 /opt/rpi-clock/config.ini
+if [[ "$FILES_NEED_UPDATE" == "true" ]] || [[ "$SKIP_PACKAGES" == "false" ]]; then
+    echo ""
+    echo -e "${CYAN}Step 8: Installing RPI-Clock files...${NC}"
 
-echo ""
-echo "Step 9: Creating systemd service for RPI-Clock..."
+    # Create installation directory (idempotent)
+    sudo mkdir -p /opt/rpi-clock
 
-# Create systemd service file (run as user with GPIO group access)
-sudo tee /etc/systemd/system/rpi-clock.service > /dev/null <<EOF
+    # Copy project files
+    echo "Installing RPI-Clock files..."
+    sudo cp clock.py /opt/rpi-clock/
+    sudo cp config.ini /opt/rpi-clock/
+    sudo cp rpi-clock-logo.png /opt/rpi-clock/ 2>/dev/null || true
+    sudo cp rpi-clock.gif /opt/rpi-clock/ 2>/dev/null || true
+
+    # Copy diagnostic scripts
+    sudo cp i2c-test.sh /opt/rpi-clock/
+    sudo cp gps-test.sh /opt/rpi-clock/
+    sudo cp ntp-test.sh /opt/rpi-clock/
+
+    # Set proper permissions
+    echo "Setting file permissions..."
+    sudo chown -R root:root /opt/rpi-clock
+    sudo chmod 755 /opt/rpi-clock
+    sudo chmod 644 /opt/rpi-clock/*.py /opt/rpi-clock/*.ini /opt/rpi-clock/*.png /opt/rpi-clock/*.gif
+    sudo chmod 755 /opt/rpi-clock/*.sh
+
+    # Make config.ini editable by the user who ran the setup
+    sudo chown root:"$USER" /opt/rpi-clock/config.ini
+    sudo chmod 664 /opt/rpi-clock/config.ini
+else
+    echo -e "${GREEN}✓ RPI-Clock files already up to date${NC}"
+fi
+
+# Check if service creation is needed
+SERVICE_NEEDED=false
+if [[ ! -f /etc/systemd/system/rpi-clock.service ]]; then
+    SERVICE_NEEDED=true
+fi
+
+if [[ "$SERVICE_NEEDED" == "true" ]] || [[ "$SKIP_PACKAGES" == "false" ]]; then
+    echo ""
+    echo -e "${CYAN}Step 9: Creating systemd service for RPI-Clock...${NC}"
+
+    # Create systemd service file (run as user with GPIO group access)
+    sudo tee /etc/systemd/system/rpi-clock.service > /dev/null <<EOF
 [Unit]
 Description=RPI Clock - GPS-synchronized timekeeper with weather display
 Documentation=https://github.com/jkeychan/rpi-clock
@@ -419,32 +547,45 @@ SyslogIdentifier=rpi-clock
 WantedBy=multi-user.target
 EOF
 
-# Enable and start service (idempotent)
-sudo systemctl daemon-reload
-if ! systemctl is-enabled --quiet rpi-clock.service; then
-    echo "Enabling rpi-clock.service..."
-    sudo systemctl enable rpi-clock.service
+    # Enable and start service (idempotent)
+    sudo systemctl daemon-reload
+    if ! systemctl is-enabled --quiet rpi-clock.service; then
+        echo "Enabling rpi-clock.service..."
+        sudo systemctl enable rpi-clock.service
+    else
+        echo -e "${GREEN}✓ rpi-clock.service already enabled${NC}"
+    fi
 else
-    echo "rpi-clock.service already enabled"
+    echo -e "${GREEN}✓ RPI-Clock service already configured${NC}"
 fi
 
-echo ""
-echo "Step 10: Starting services..."
-
-# Start GPS daemon (idempotent)
-if ! systemctl is-active --quiet gpsd.service; then
-    echo "Starting gpsd.service..."
-    sudo systemctl start gpsd.service
-else
-    echo "gpsd.service already running"
+# Check if services need to be started
+SERVICES_NEED_START=false
+if ! systemctl is-active --quiet gpsd.service || ! systemctl is-active --quiet rpi-clock.service; then
+    SERVICES_NEED_START=true
 fi
 
-# Start RPI-Clock service (idempotent)
-if ! systemctl is-active --quiet rpi-clock.service; then
-    echo "Starting rpi-clock.service..."
-    sudo systemctl start rpi-clock.service
+if [[ "$SERVICES_NEED_START" == "true" ]] || [[ "$SKIP_PACKAGES" == "false" ]]; then
+    echo ""
+    echo -e "${CYAN}Step 10: Starting services...${NC}"
+
+    # Start GPS daemon (idempotent)
+    if ! systemctl is-active --quiet gpsd.service; then
+        echo "Starting gpsd.service..."
+        sudo systemctl start gpsd.service
+    else
+        echo -e "${GREEN}✓ gpsd.service already running${NC}"
+    fi
+
+    # Start RPI-Clock service (idempotent)
+    if ! systemctl is-active --quiet rpi-clock.service; then
+        echo "Starting rpi-clock.service..."
+        sudo systemctl start rpi-clock.service
+    else
+        echo -e "${GREEN}✓ rpi-clock.service already running${NC}"
+    fi
 else
-    echo "rpi-clock.service already running"
+    echo -e "${GREEN}✓ All services already running${NC}"
 fi
 
 echo ""
