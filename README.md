@@ -37,6 +37,40 @@ A Raspberry Pi-based clock with GPS time synchronization and weather display usi
 
 ## Quick Start
 
+1. **Clone Repository**: 
+   ```bash
+   git clone https://github.com/jkeychan/rpi-clock.git
+   cd rpi-clock
+   ```
+
+2. **Run Automated Setup**: 
+   ```bash
+   ./setup.sh
+   ```
+
+3. **Configure Settings**: Edit `config.ini` with your OpenWeatherMap API key and ZIP code:
+   ```bash
+   sudo nano /opt/rpi-clock/config.ini
+   ```
+
+4. **Reboot** (if prompted by setup script)
+
+5. **Verify Installation**: Check GPS and display are working:
+   ```bash
+   # Test GPS connection
+   cgps -s
+   
+   # Check chrony sources
+   chronyc sources
+   
+   # Check clock service
+   sudo systemctl status rpi-clock
+   ```
+
+## Manual Installation
+
+If you prefer manual setup over the automated script:
+
 1. **Assemble Hardware**: Follow the [Hardware Setup Guide](#hardware-setup) below
 2. **Configure Raspberry Pi**: Complete the [System Configuration](#system-configuration) steps
 3. **Install Dependencies**: Run the [Software Installation](#software-installation) commands

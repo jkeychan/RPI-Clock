@@ -204,7 +204,24 @@ if grep -q "dtoverlay=pps-gpio" /boot/firmware/config.txt; then
     echo "PPS overlay already enabled"
 else
     echo "Enabling PPS overlay for GPS precision timing..."
-    sudo sed -i '/dtoverlay=disable-bt/a dtoverlay=pps-gpio,gpiopin=4' /boot/firmware/config.txt
+    sudo sed -i '/dtoverlay=disable-bt/a dtoverlay=pps-gpio,gpiopin=18' /boot/firmware/config.txt
+fi
+
+# Load PPS modules for GPS precision timing
+echo "Loading PPS modules..."
+if ! lsmod | grep -q pps_ldisc; then
+    echo "Loading pps_ldisc module..."
+    sudo modprobe pps_ldisc
+else
+    echo "pps_ldisc module already loaded"
+fi
+
+# Add pps_ldisc to modules for auto-loading at boot
+if ! grep -q "pps_ldisc" /etc/modules; then
+    echo "Adding pps_ldisc to /etc/modules for auto-loading..."
+    echo "pps_ldisc" | sudo tee -a /etc/modules
+else
+    echo "pps_ldisc already in /etc/modules"
 fi
 
 # Install I2C tools
@@ -415,6 +432,72 @@ else
 fi
 
 echo ""
+echo "Step 11: Validating installation..."
+
+# Validate GPS daemon is running
+if systemctl is-active --quiet gpsd.service; then
+    echo "✓ GPS daemon (gpsd) is running"
+else
+    echo "✗ GPS daemon (gpsd) is not running"
+    echo "  Run: sudo systemctl status gpsd.service"
+fi
+
+# Validate chrony is running
+if systemctl is-active --quiet chrony.service; then
+    echo "✓ Chrony time synchronization is running"
+else
+    echo "✗ Chrony time synchronization is not running"
+    echo "  Run: sudo systemctl status chrony.service"
+fi
+
+# Validate RPI-Clock service is running
+if systemctl is-active --quiet rpi-clock.service; then
+    echo "✓ RPI-Clock service is running"
+else
+    echo "✗ RPI-Clock service is not running"
+    echo "  Run: sudo systemctl status rpi-clock.service"
+fi
+
+# Validate GPS device exists
+if [[ -e /dev/ttyAMA0 ]]; then
+    echo "✓ GPS device /dev/ttyAMA0 exists"
+else
+    echo "✗ GPS device /dev/ttyAMA0 not found"
+    echo "  This may require a reboot to activate UART configuration"
+fi
+
+# Validate PPS device exists
+if [[ -e /dev/pps0 ]]; then
+    echo "✓ PPS device /dev/pps0 exists"
+else
+    echo "✗ PPS device /dev/pps0 not found"
+    echo "  This may require a reboot to activate PPS configuration"
+fi
+
+# Validate I2C is enabled
+if i2c_enabled; then
+    echo "✓ I2C interface is enabled"
+else
+    echo "✗ I2C interface is not enabled"
+    echo "  Run: sudo raspi-config nonint do_i2c 0"
+fi
+
+# Validate user groups
+if user_in_i2c_group; then
+    echo "✓ User is in i2c group"
+else
+    echo "✗ User is not in i2c group"
+    echo "  Run: sudo usermod -a -G i2c $USER"
+fi
+
+if user_in_gpio_group; then
+    echo "✓ User is in gpio group"
+else
+    echo "✗ User is not in gpio group"
+    echo "  Run: sudo usermod -a -G gpio $USER"
+fi
+
+echo ""
 echo "Setup completed successfully!"
 echo ""
 echo "Services started:"
@@ -476,12 +559,19 @@ echo ""
 echo "Next steps after reboot:"
 echo "1. Edit config.ini with your OpenWeatherMap API key and ZIP code:"
 echo "   sudo nano /opt/rpi-clock/config.ini"
+echo "   - Replace 'XXXXXXXX' with your actual OpenWeatherMap API key"
+echo "   - Replace '90210' with your actual ZIP code"
 echo "2. Ensure your GPS antenna has a clear view of the sky"
 echo "3. Test GPS connection: cgps -s"
 echo "4. Check GPS HAT detection: ls -la /dev/ttyAMA*"
 echo "5. Check chrony sources: chronyc sources"
 echo "6. Check clock status: sudo systemctl status rpi-clock"
 echo "7. View clock logs: sudo journalctl -u rpi-clock -f"
+echo ""
+echo "IMPORTANT: The clock will not display weather data until you:"
+echo "- Get a free API key from https://openweathermap.org/api_keys/"
+echo "- Update /opt/rpi-clock/config.ini with your API key and ZIP code"
+echo "- Restart the service: sudo systemctl restart rpi-clock"
 echo ""
 echo "The clock will automatically start on boot."
 echo "GPS HAT will be available on /dev/ttyAMA0 after reboot."
