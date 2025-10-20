@@ -200,6 +200,8 @@ def test_python_i2c_access() -> bool:
                 print("  - GND (black) → Pi pin 6 (GND)")
                 print("  - SDA (yellow) → Pi pin 3 (GPIO 2)")
                 print("  - SCL (white) → Pi pin 5 (GPIO 3)")
+                print("  - COMMON ISSUE: SDA and SCL wires are easily confused!")
+                print("    Try swapping SDA (yellow) and SCL (white) wires")
                 return False
                 
         except OSError as e:
@@ -309,6 +311,7 @@ def print_wiring_guide() -> None:
     print("IMPORTANT NOTES:")
     print("- Both VIN (5V) and IO (3.3V) must be connected")
     print("- IO connection is REQUIRED for proper operation")
+    print("- SDA and SCL wires are easily confused - try swapping them!")
     print("- Ensure all connections are secure")
     print("- Check for loose wires or cold solder joints")
 

@@ -89,6 +89,7 @@ These scripts are installed to `/opt/rpi-clock/` and can be run from there. They
    - GND → Pi GND
    - SDA → Pi SDA (GPIO 2)
    - SCL → Pi SCL (GPIO 3)
+   - **COMMON ISSUE**: SDA and SCL wires are easily confused - try swapping them!
 
 4. **Test display manually**:
    ```python
@@ -109,7 +110,10 @@ These scripts are installed to `/opt/rpi-clock/` and can be run from there. They
 - Characters appear garbled
 
 **Solutions:**
-1. **Check SDA/SCL connections**: Swap SDA and SCL wires
+1. **Check SDA/SCL connections**: 
+   - **COMMON ISSUE**: SDA and SCL wires are easily confused
+   - Try swapping SDA (yellow) and SCL (white) wires
+   - Correct wiring: SDA (yellow) → Pi pin 3 (GPIO 2), SCL (white) → Pi pin 5 (GPIO 3)
 2. **Verify I2C address**: Ensure no address conflicts
 3. **Check power**: Ensure stable 5V power supply
 4. **Test with known good display**: Replace display if faulty

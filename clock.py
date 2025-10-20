@@ -829,6 +829,8 @@ if __name__ == "__main__":
         print("   - GND (black) → Pi pin 6 (GND)")
         print("   - SDA (yellow) → Pi pin 3 (GPIO 2)")
         print("   - SCL (white) → Pi pin 5 (GPIO 3)")
+        print("   - COMMON ISSUE: SDA and SCL wires are easily confused!")
+        print("     Try swapping SDA (yellow) and SCL (white) wires")
         print("")
         print("2. Verify I2C is enabled:")
         print("   sudo raspi-config nonint do_i2c 0")
