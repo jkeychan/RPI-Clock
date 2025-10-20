@@ -217,31 +217,182 @@ def signal_handler(sig: int, frame: Any) -> None:
     sys.exit(0)
 
 
+def check_hardware_prerequisites() -> bool:
+    """Check hardware prerequisites before attempting display initialization.
+    
+    Returns:
+        bool: True if all hardware prerequisites are met, False otherwise
+    """
+    print("Checking hardware prerequisites...")
+    
+    # Check if I2C modules are loaded
+    try:
+        with open('/proc/modules', 'r') as f:
+            modules = f.read()
+        if 'i2c_dev' not in modules:
+            print("✗ I2C device module not loaded")
+            print("  Run: sudo modprobe i2c_dev")
+            return False
+        if 'i2c_bcm2835' not in modules:
+            print("✗ I2C BCM2835 module not loaded")
+            print("  Run: sudo modprobe i2c_bcm2835")
+            return False
+    except Exception as e:
+        print(f"✗ Cannot check I2C modules: {e}")
+        return False
+    
+    # Check if I2C device files exist
+    if not os.path.exists('/dev/i2c-1'):
+        print("✗ I2C device file /dev/i2c-1 not found")
+        print("  I2C interface may not be enabled")
+        print("  Run: sudo raspi-config nonint do_i2c 0")
+        print("  Then reboot the system")
+        return False
+    
+    # Check if user has I2C permissions
+    try:
+        import grp
+        i2c_group = grp.getgrnam('i2c')
+        if i2c_group.gr_gid not in os.getgroups():
+            print("✗ User not in i2c group")
+            print("  Run: sudo usermod -a -G i2c $USER")
+            print("  Then logout and login again")
+            return False
+    except Exception as e:
+        print(f"✗ Cannot check I2C permissions: {e}")
+        return False
+    
+    print("✓ Hardware prerequisites check passed")
+    return True
+
+
+def scan_i2c_devices() -> bool:
+    """Scan I2C bus for devices and check for display.
+    
+    Returns:
+        bool: True if display is found at expected address, False otherwise
+    """
+    print("Scanning I2C bus for devices...")
+    
+    try:
+        i2c = busio.I2C(board.SCL, board.SDA)
+        devices = i2c.scan()
+        
+        if not devices:
+            print("✗ No I2C devices found on bus")
+            print("  Check your wiring:")
+            print("  - VIN (red) → Pi pin 2 (5V)")
+            print("  - IO (orange) → Pi pin 1 (3.3V) - REQUIRED")
+            print("  - GND (black) → Pi pin 6 (GND)")
+            print("  - SDA (yellow) → Pi pin 3 (GPIO 2)")
+            print("  - SCL (white) → Pi pin 5 (GPIO 3)")
+            return False
+        
+        print(f"✓ Found I2C devices at addresses: {[hex(addr) for addr in devices]}")
+        
+        if 0x70 in devices:
+            print("✓ Display found at address 0x70")
+            return True
+        else:
+            print("✗ Display NOT found at address 0x70")
+            print("  Expected device at 0x70 (7-segment display)")
+            print("  Check your wiring:")
+            print("  - VIN (red) → Pi pin 2 (5V)")
+            print("  - IO (orange) → Pi pin 1 (3.3V) - REQUIRED")
+            print("  - GND (black) → Pi pin 6 (GND)")
+            print("  - SDA (yellow) → Pi pin 3 (GPIO 2)")
+            print("  - SCL (white) → Pi pin 5 (GPIO 3)")
+            print("  - Ensure all connections are secure")
+            return False
+            
+    except OSError as e:
+        if e.errno == 121:  # Remote I/O error
+            print("✗ I2C Remote I/O error - device not responding")
+            print("  This usually indicates a wiring problem")
+            print("  Check your connections:")
+            print("  - VIN (red) → Pi pin 2 (5V)")
+            print("  - IO (orange) → Pi pin 1 (3.3V) - REQUIRED")
+            print("  - GND (black) → Pi pin 6 (GND)")
+            print("  - SDA (yellow) → Pi pin 3 (GPIO 2)")
+            print("  - SCL (white) → Pi pin 5 (GPIO 3)")
+        elif e.errno == 5:  # Input/output error
+            print("✗ I2C Input/Output error")
+            print("  Check I2C interface is enabled and user has permissions")
+        else:
+            print(f"✗ I2C communication error: {e}")
+        return False
+    except Exception as e:
+        print(f"✗ Unexpected error scanning I2C devices: {e}")
+        return False
+
+
 def initialize_display() -> bool:
-    """Initialize the 7-segment display with error handling.
+    """Initialize the 7-segment display with comprehensive error handling.
 
     Returns:
         bool: True if display initialized successfully, False otherwise
     """
     global display
+    
+    # First check hardware prerequisites
+    if not check_hardware_prerequisites():
+        print("✗ Hardware prerequisites not met - cannot initialize display")
+        return False
+    
+    # Scan for I2C devices
+    if not scan_i2c_devices():
+        print("✗ I2C device scan failed - cannot initialize display")
+        return False
+    
+    # Now attempt to initialize the display
     try:
+        print("Initializing 7-segment display...")
         i2c = busio.I2C(board.SCL, board.SDA)
         display = segments.Seg7x4(i2c)
         display.brightness = BRIGHTNESS
-        print(
-            f"✓ 7-segment display initialized successfully (brightness: {BRIGHTNESS})")
+        print(f"✓ 7-segment display initialized successfully (brightness: {BRIGHTNESS})")
+        
+        # Test the display with a simple message
+        display.fill(0)
+        display.print("INIT")
+        display.show()
+        time.sleep(1)
+        display.fill(0)
+        display.show()
+        
         return True
-    except busio.I2CError as e:
-        print(f"✗ I2C communication error: {e}")
-        print("  Check I2C connections and enable I2C interface")
-        return False
+        
     except ValueError as e:
-        print(f"✗ Display address error: {e}")
-        print("  Check display I2C address (should be 0x70)")
+        if "No I2C device at address" in str(e):
+            print("✗ Display not found at expected address 0x70")
+            print("  This indicates a wiring problem:")
+            print("  - Check all connections are secure")
+            print("  - Ensure VIN (red) is connected to 5V")
+            print("  - Ensure IO (orange) is connected to 3.3V - REQUIRED")
+            print("  - Verify SDA/SCL connections")
+            print("  - Try power cycling the display")
+        else:
+            print(f"✗ Display address error: {e}")
+        return False
+    except OSError as e:
+        if e.errno == 121:  # Remote I/O error
+            print("✗ I2C Remote I/O error during display initialization")
+            print("  Device not responding - check wiring:")
+            print("  - VIN (red) → Pi pin 2 (5V)")
+            print("  - IO (orange) → Pi pin 1 (3.3V) - REQUIRED")
+            print("  - GND (black) → Pi pin 6 (GND)")
+            print("  - SDA (yellow) → Pi pin 3 (GPIO 2)")
+            print("  - SCL (white) → Pi pin 5 (GPIO 3)")
+        elif e.errno == 5:  # Input/output error
+            print("✗ I2C Input/Output error during display initialization")
+            print("  Check I2C interface and permissions")
+        else:
+            print(f"✗ I2C communication error: {e}")
         return False
     except Exception as e:
         print(f"✗ Display initialization failed: {e}")
         print("  Run i2c-test.sh for detailed diagnostics")
+        print("  Check wiring and I2C setup")
         return False
 
 
@@ -570,38 +721,43 @@ def main_loop() -> None:
     cycle_counter = 0
     global cached_weather_info
 
+    # This should never happen due to startup checks, but just in case
+    if not display:
+        print("✗ CRITICAL ERROR: Display is None in main loop")
+        print("  This should not happen - display was initialized successfully")
+        print("  Exiting to prevent further errors")
+        sys.exit(1)
+
     while True:
         try:
             # Time display loop - optimized with monotonic tick and cached redraws
             total_seconds = TIME_DISPLAY * 2  # preserve original semantics
-            if display:
-                # Initial render and minute cache
+            
+            # Initial render and minute cache
+            now_struct = time.localtime()
+            global last_time_minute
+            last_time_minute = now_struct.tm_min
+            display_time()
+
+            seconds_elapsed = 0
+            colon_on = False
+            next_tick = time.monotonic()
+            while seconds_elapsed < total_seconds:
+                colon_on = not colon_on
+                display.colon = colon_on
+                display.show()
+
+                # Update time at minute change without redrawing otherwise
                 now_struct = time.localtime()
-                global last_time_minute
-                last_time_minute = now_struct.tm_min
-                display_time()
+                if now_struct.tm_min != last_time_minute:
+                    last_time_minute = now_struct.tm_min
+                    display_time()
 
-                seconds_elapsed = 0
-                colon_on = False
-                next_tick = time.monotonic()
-                while seconds_elapsed < total_seconds:
-                    colon_on = not colon_on
-                    display.colon = colon_on
-                    display.show()
-
-                    # Update time at minute change without redrawing otherwise
-                    now_struct = time.localtime()
-                    if now_struct.tm_min != last_time_minute:
-                        last_time_minute = now_struct.tm_min
-                        display_time()
-
-                    next_tick += 1.0
-                    sleep_duration = next_tick - time.monotonic()
-                    if sleep_duration > 0:
-                        time.sleep(sleep_duration)
-                    seconds_elapsed += 1
-            else:
-                time.sleep(total_seconds)
+                next_tick += 1.0
+                sleep_duration = next_tick - time.monotonic()
+                if sleep_duration > 0:
+                    time.sleep(sleep_duration)
+                seconds_elapsed += 1
 
             # Check if custom text should be displayed
             if should_display_custom_text():
@@ -651,10 +807,62 @@ if __name__ == "__main__":
     signal.signal(signal.SIGINT, signal_handler)
     signal.signal(signal.SIGTERM, signal_handler)
 
-    # Initialize components
-    initialize_display()
-    initialize_ntp()
-    initialize_http_session()
-
+    print("RPI-Clock: GPS-synchronized timekeeper with weather display")
+    print("=" * 60)
+    
+    # Initialize components with proper error handling
+    display_ok = initialize_display()
+    ntp_ok = initialize_ntp()
+    http_ok = initialize_http_session()
+    
+    # Check if critical components failed
+    if not display_ok:
+        print("\n" + "=" * 60)
+        print("✗ CRITICAL ERROR: Display initialization failed")
+        print("=" * 60)
+        print("The clock cannot start without a working display.")
+        print("")
+        print("Hardware troubleshooting steps:")
+        print("1. Check your wiring connections:")
+        print("   - VIN (red) → Pi pin 2 (5V)")
+        print("   - IO (orange) → Pi pin 1 (3.3V) - REQUIRED")
+        print("   - GND (black) → Pi pin 6 (GND)")
+        print("   - SDA (yellow) → Pi pin 3 (GPIO 2)")
+        print("   - SCL (white) → Pi pin 5 (GPIO 3)")
+        print("")
+        print("2. Verify I2C is enabled:")
+        print("   sudo raspi-config nonint do_i2c 0")
+        print("   sudo reboot")
+        print("")
+        print("3. Check user permissions:")
+        print("   sudo usermod -a -G i2c $USER")
+        print("   # Then logout and login again")
+        print("")
+        print("4. Run diagnostic script:")
+        print("   ./i2c-test.sh")
+        print("")
+        print("5. Check service logs:")
+        print("   sudo journalctl -u rpi-clock.service -f")
+        print("")
+        print("For detailed troubleshooting, see TROUBLESHOOTING.md")
+        print("=" * 60)
+        sys.exit(1)
+    
+    # Warn about non-critical failures
+    warnings = []
+    if not ntp_ok:
+        warnings.append("NTP client failed - time sync may be limited")
+    if not http_ok:
+        warnings.append("HTTP session failed - weather data may be unavailable")
+    
+    if warnings:
+        print("\n⚠️  Warnings:")
+        for warning in warnings:
+            print(f"  - {warning}")
+        print("  Clock will continue with limited functionality")
+    
+    print("\n✓ All critical components initialized successfully")
     print("Starting Raspberry Pi Clock...")
+    print("=" * 60)
+    
     main_loop()
