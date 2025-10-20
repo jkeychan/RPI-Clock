@@ -33,9 +33,9 @@ def run_command(cmd: List[str], capture_output: bool = True) -> Tuple[int, str, 
     """Run a command and return exit code, stdout, stderr."""
     try:
         result = subprocess.run(
-            cmd, 
-            capture_output=capture_output, 
-            text=True, 
+            cmd,
+            capture_output=capture_output,
+            text=True,
             timeout=30
         )
         return result.returncode, result.stdout, result.stderr
@@ -48,14 +48,14 @@ def run_command(cmd: List[str], capture_output: bool = True) -> Tuple[int, str, 
 def check_i2c_modules() -> bool:
     """Check if required I2C kernel modules are loaded."""
     print_step(1, "Checking I2C kernel modules")
-    
+
     try:
         with open('/proc/modules', 'r') as f:
             modules = f.read()
-        
+
         required_modules = ['i2c_dev', 'i2c_bcm2835']
         all_loaded = True
-        
+
         for module in required_modules:
             if module in modules:
                 print(f"✓ {module} module is loaded")
@@ -63,9 +63,9 @@ def check_i2c_modules() -> bool:
                 print(f"✗ {module} module is NOT loaded")
                 print(f"  Run: sudo modprobe {module}")
                 all_loaded = False
-        
+
         return all_loaded
-        
+
     except Exception as e:
         print(f"✗ Cannot check I2C modules: {e}")
         return False
@@ -74,34 +74,34 @@ def check_i2c_modules() -> bool:
 def check_i2c_device_files() -> bool:
     """Check if I2C device files exist."""
     print_step(2, "Checking I2C device files")
-    
+
     i2c_devices = ['/dev/i2c-0', '/dev/i2c-1']
     found_devices = []
-    
+
     for device in i2c_devices:
         if os.path.exists(device):
             print(f"✓ Found I2C device: {device}")
             found_devices.append(device)
         else:
             print(f"✗ I2C device not found: {device}")
-    
+
     if not found_devices:
         print("✗ No I2C device files found")
         print("  I2C interface may not be enabled")
         print("  Run: sudo raspi-config nonint do_i2c 0")
         print("  Then reboot the system")
         return False
-    
+
     return True
 
 
 def check_i2c_tools() -> bool:
     """Check if I2C tools are installed."""
     print_step(3, "Checking I2C tools")
-    
+
     tools = ['i2cdetect', 'i2cget', 'i2cset']
     all_available = True
-    
+
     for tool in tools:
         exit_code, _, _ = run_command(['which', tool])
         if exit_code == 0:
@@ -110,23 +110,24 @@ def check_i2c_tools() -> bool:
             print(f"✗ {tool} is NOT available")
             print("  Run: sudo apt install i2c-tools")
             all_available = False
-    
+
     return all_available
 
 
 def scan_i2c_bus() -> Optional[List[int]]:
     """Scan I2C bus for devices."""
     print_step(4, "Scanning I2C bus for devices")
-    
+
     # Try both I2C buses
     for bus_num in [0, 1]:
         print(f"\nScanning I2C bus {bus_num}...")
-        exit_code, stdout, stderr = run_command(['i2cdetect', '-y', str(bus_num)])
-        
+        exit_code, stdout, stderr = run_command(
+            ['i2cdetect', '-y', str(bus_num)])
+
         if exit_code == 0:
             print(f"Bus {bus_num} scan results:")
             print(stdout)
-            
+
             # Parse devices from output
             devices = []
             lines = stdout.strip().split('\n')[1:]  # Skip header
@@ -138,27 +139,28 @@ def scan_i2c_bus() -> Optional[List[int]]:
                         devices.append(int(addr_part))
                     elif addr_part.startswith('0x'):
                         devices.append(int(addr_part, 16))
-            
+
             if devices:
-                print(f"✓ Found devices on bus {bus_num}: {[hex(addr) for addr in devices]}")
+                print(
+                    f"✓ Found devices on bus {bus_num}: {[hex(addr) for addr in devices]}")
                 return devices
             else:
                 print(f"✗ No devices found on bus {bus_num}")
         else:
             print(f"✗ Cannot scan bus {bus_num}: {stderr}")
-    
+
     return None
 
 
 def check_user_permissions() -> bool:
     """Check if user has I2C permissions."""
     print_step(5, "Checking user permissions")
-    
+
     try:
         import grp
         i2c_group = grp.getgrnam('i2c')
         user_groups = os.getgroups()
-        
+
         if i2c_group.gr_gid in user_groups:
             print("✓ User is in i2c group")
             return True
@@ -167,7 +169,7 @@ def check_user_permissions() -> bool:
             print("  Run: sudo usermod -a -G i2c $USER")
             print("  Then logout and login again")
             return False
-            
+
     except Exception as e:
         print(f"✗ Cannot check I2C permissions: {e}")
         return False
@@ -176,19 +178,19 @@ def check_user_permissions() -> bool:
 def test_python_i2c_access() -> bool:
     """Test Python I2C access."""
     print_step(6, "Testing Python I2C access")
-    
+
     try:
         import board
         import busio
         print("✓ CircuitPython board and busio modules available")
-        
+
         try:
             i2c = busio.I2C(board.SCL, board.SDA)
             print("✓ I2C interface created successfully")
-            
+
             devices = i2c.scan()
             print(f"I2C devices found: {[hex(addr) for addr in devices]}")
-            
+
             if 0x70 in devices:
                 print("✓ Display found at address 0x70")
                 return True
@@ -203,7 +205,7 @@ def test_python_i2c_access() -> bool:
                 print("  - COMMON ISSUE: SDA and SCL wires are easily confused!")
                 print("    Try swapping SDA (yellow) and SCL (white) wires")
                 return False
-                
+
         except OSError as e:
             if e.errno == 121:  # Remote I/O error
                 print("✗ I2C Remote I/O error - device not responding")
@@ -214,7 +216,7 @@ def test_python_i2c_access() -> bool:
             else:
                 print(f"✗ I2C communication error: {e}")
             return False
-            
+
     except ImportError as e:
         print(f"✗ Missing Python modules: {e}")
         print("  Run: pip3 install --break-system-packages adafruit-circuitpython-ht16k33")
@@ -227,34 +229,34 @@ def test_python_i2c_access() -> bool:
 def test_display_initialization() -> bool:
     """Test display initialization."""
     print_step(7, "Testing display initialization")
-    
+
     try:
         import board
         import busio
         from adafruit_ht16k33.segments import Seg7x4
-        
+
         print("Attempting to initialize display...")
         i2c = busio.I2C(board.SCL, board.SDA)
         display = Seg7x4(i2c)
-        
+
         print("✓ Display initialized successfully!")
         print("Testing display...")
-        
+
         # Test display
         display.brightness = 0.5
         display.fill(0)
         display.print("TEST")
         display.show()
-        
+
         print("✓ Display test completed")
         print("You should see \"TEST\" on your display")
-        
+
         # Clear display
         display.fill(0)
         display.show()
-        
+
         return True
-        
+
     except ValueError as e:
         if "No I2C device at address" in str(e):
             print("✗ Display not found at expected address 0x70")
@@ -280,7 +282,7 @@ def test_display_initialization() -> bool:
 def check_running_processes() -> None:
     """Check for running clock processes."""
     print_step(8, "Checking for running clock processes")
-    
+
     try:
         exit_code, stdout, stderr = run_command(['pgrep', '-f', 'clock.py'])
         if exit_code == 0:
@@ -350,7 +352,7 @@ def main():
     print("====================================")
     print("This script will check your hardware setup and help")
     print("troubleshoot display connection issues.")
-    
+
     # Run all diagnostic checks
     checks = [
         ("I2C Modules", check_i2c_modules),
@@ -361,7 +363,7 @@ def main():
         ("Python I2C Access", test_python_i2c_access),
         ("Display Initialization", test_display_initialization),
     ]
-    
+
     results = []
     for check_name, check_func in checks:
         try:
@@ -370,23 +372,23 @@ def main():
         except Exception as e:
             print(f"✗ Error in {check_name}: {e}")
             results.append((check_name, False))
-    
+
     # Check running processes (informational only)
     check_running_processes()
-    
+
     # Print summary
     print_header("DIAGNOSTIC SUMMARY")
     passed = 0
     total = len(results)
-    
+
     for check_name, result in results:
         status = "✓ PASS" if result else "✗ FAIL"
         print(f"{status} {check_name}")
         if result:
             passed += 1
-    
+
     print(f"\nOverall: {passed}/{total} checks passed")
-    
+
     if passed == total:
         print("\n🎉 All checks passed! Your hardware setup looks good.")
         print("You can now run the clock application:")
@@ -397,7 +399,7 @@ def main():
         print("\n⚠️  Some checks failed. Please review the issues above.")
         print_wiring_guide()
         print_troubleshooting_steps()
-    
+
     print("\nFor more detailed troubleshooting, see TROUBLESHOOTING.md")
 
 
