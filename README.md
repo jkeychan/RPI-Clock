@@ -21,12 +21,12 @@ A Raspberry Pi-based clock with GPS time synchronization and weather display usi
 
 - **Raspberry Pi Zero 2 W** (or any Raspberry Pi with 40-pin GPIO header)
 - **Adafruit Ultimate GPS HAT for Raspberry Pi** - Mini Kit
-- **Adafruit 1.2" 4-Digit 7-Segment Display w/I2C Backpack** - Yellow
+- **Adafruit 1.2" 4-Digit 7-Segment Display w/I2C Backpack**
 - **GPIO Stacking Header for Pi A+/B+/Pi 2/Pi 3** - Extra-long 2x20 Pins
 - **CR1220 Coin Cell Battery** (for GPS HAT RTC backup)
-- **JST 2.0mm 4-Pin Connector Set** - 10pcs with Mini Female and Male Plugs
+
 - **Female-to-Female Dupont Jumper Wires** (5 wires minimum: VIN, IO, GND, SDA, SCL)
-- **Dupont Crimping Tool** (for professional connections)
+
 - **SMA to uFL/u.FL/IPX/IPEX RF Adapter Cable** (optional, for external antenna)
 - **External GPS Antenna with SMA connector** (optional, improves indoor reception)
 
@@ -98,12 +98,12 @@ If you prefer manual setup over the automated script:
    - **Yellow** → **SDA** (data)
    - **White** → **SCL** (clock)
 
-3. **Connect to Pi**: Plug the Dupont connectors to the stacking header pins:
-   - **VIN** → **Pi 5V** pin 2
-   - **IO** → **Pi 3.3V** pin 1
-   - **GND** → **Pi GND** pin 6
-   - **SDA** → **Pi SDA** (GPIO 2) pin 3
-   - **SCL** → **Pi SCL** (GPIO 3) pin 5
+3. **Connect to the [Raspberry Pi](https://pinout.xyz/)**: Plug the Dupont connectors to the stacking header pins:
+   - **Red** → **VIN** → **Pi 5V** pin 2
+   - **Orange** → **IO** → **Pi 3.3V** pin 1
+   - **Black** → **GND** → **Pi GND** pin 6
+   - **Yellow** → **SDA** → **Pi SDA** (GPIO 2) pin 3
+   - **White** → **SCL** → **Pi SCL** (GPIO 3) pin 5
 
 ### Step 3: Optional External Antenna
 
