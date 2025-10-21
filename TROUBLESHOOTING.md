@@ -4,7 +4,7 @@ This guide helps you diagnose and fix common issues with the RPI-Clock project.
 
 ## Diagnostic Scripts
 
-The project includes comprehensive diagnostic scripts to help troubleshoot issues:
+The project includes three essential diagnostic scripts to help troubleshoot issues:
 
 ```bash
 # Test I2C display connection
@@ -17,7 +17,7 @@ The project includes comprehensive diagnostic scripts to help troubleshoot issue
 ./ntp-test.sh
 ```
 
-These scripts are installed to `/opt/rpi-clock/` and can be run from there. They provide detailed diagnostics and troubleshooting suggestions.
+These scripts are installed to `/opt/rpi-clock/` and can be run from there. They provide detailed diagnostics and troubleshooting suggestions for each component.
 
 ## GPS Issues
 

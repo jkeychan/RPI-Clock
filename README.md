@@ -523,7 +523,7 @@ sudo systemctl restart rpi-clock.service
 
 ### Diagnostic Scripts
 
-The project includes comprehensive diagnostic scripts to help troubleshoot issues:
+The project includes three essential diagnostic scripts to help troubleshoot issues:
 
 ```bash
 # Test I2C display connection
@@ -536,7 +536,7 @@ The project includes comprehensive diagnostic scripts to help troubleshoot issue
 ./ntp-test.sh
 ```
 
-These scripts are installed to `/opt/rpi-clock/` and can be run from there.
+These scripts are installed to `/opt/rpi-clock/` and can be run from there. Each script provides comprehensive diagnostics and troubleshooting suggestions for its specific component.
 
 ### GPS Issues
 
