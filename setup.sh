@@ -300,30 +300,17 @@ if [[ "$HARDWARE_CONFIG_NEEDED" == "true" ]] || [[ "$SKIP_PACKAGES" == "false" ]
         sudo sed -i '/enable_uart=1/a dtoverlay=disable-bt' /boot/firmware/config.txt
     fi
 
-    # Enable PPS overlay for GPS precision timing
+    # Enable PPS overlay for GPS precision timing (Adafruit GPS HAT uses GPIO 4)
     if grep -q "dtoverlay=pps-gpio" /boot/firmware/config.txt; then
         echo -e "${GREEN}✓ PPS overlay already enabled${NC}"
     else
         echo "Enabling PPS overlay for GPS precision timing..."
-        sudo sed -i '/dtoverlay=disable-bt/a dtoverlay=pps-gpio,gpiopin=18' /boot/firmware/config.txt
+        sudo sed -i '/dtoverlay=disable-bt/a dtoverlay=pps-gpio,gpiopin=4' /boot/firmware/config.txt
     fi
 
-    # Load PPS modules for GPS precision timing
-    echo "Loading PPS modules..."
-    if ! lsmod | grep -q pps_ldisc; then
-        echo "Loading pps_ldisc module..."
-        sudo modprobe pps_ldisc
-    else
-        echo -e "${GREEN}✓ pps_ldisc module already loaded${NC}"
-    fi
-
-    # Add pps_ldisc to modules for auto-loading at boot
-    if ! grep -q "pps_ldisc" /etc/modules; then
-        echo "Adding pps_ldisc to /etc/modules for auto-loading..."
-        echo "pps_ldisc" | sudo tee -a /etc/modules
-    else
-        echo -e "${GREEN}✓ pps_ldisc already in /etc/modules${NC}"
-    fi
+    # Note: pps_ldisc module not needed - we use kernel PPS directly via /dev/pps0
+    # The pps-gpio overlay provides the kernel PPS device that chrony uses
+    echo -e "${GREEN}✓ PPS kernel module handled by pps-gpio overlay${NC}"
 
     # Install I2C tools
     if ! package_installed i2c-tools; then
@@ -446,6 +433,15 @@ if [[ "$CHRONY_CONFIG_NEEDED" == "true" ]] || [[ "$SKIP_PACKAGES" == "false" ]];
     # Install optimized chrony configuration
     echo "Installing optimized chrony configuration..."
     sudo cp chrony.conf /etc/chrony/chrony.conf
+
+    # Create chrony group for PPS device access
+    echo "Setting up PPS device permissions for chrony..."
+    sudo groupadd --system chrony 2>/dev/null || true
+    
+    # Create udev rule for PPS device permissions
+    echo 'SUBSYSTEM=="pps", KERNEL=="pps[0-9]*", GROUP="chrony", MODE="0660"' | sudo tee /etc/udev/rules.d/85-pps-permissions.rules > /dev/null
+    sudo udevadm control --reload-rules
+    sudo udevadm trigger -s pps
 
     # Restart chrony
     echo "Restarting chrony service..."
