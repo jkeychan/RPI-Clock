@@ -1,0 +1,19 @@
+[Unit]
+Description=GPS Forwarder for Meshtastic RAK11300
+After=network.target gpsd.service
+Wants=gpsd.service
+
+[Service]
+Type=simple
+User=jeff
+Group=dialout
+WorkingDirectory=/opt/rpi-clock
+ExecStart=/usr/bin/python3 /opt/rpi-clock/gps-forward-gpio-direct.py
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
+
