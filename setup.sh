@@ -89,7 +89,7 @@ echo ""
 echo -e "${CYAN}Checking if system is already configured...${NC}"
 
 # Check if all required packages are installed
-REQUIRED_PACKAGES=("python3-pip" "python3-requests" "python3-ntplib" "gpsd" "gpsd-clients" "chrony" "pps-tools" "i2c-tools" "shellcheck")
+REQUIRED_PACKAGES=("python3-pip" "python3-venv" "python3-requests" "python3-ntplib" "gpsd" "gpsd-clients" "chrony" "pps-tools" "i2c-tools" "shellcheck")
 MISSING_PACKAGES=()
 
 for package in "${REQUIRED_PACKAGES[@]}"; do
@@ -185,15 +185,6 @@ if [[ "$SKIP_PACKAGES" == "false" ]]; then
         pip3 install --user adafruit-circuitpython-ht16k33 2>/dev/null || echo "adafruit-circuitpython-ht16k33 installation skipped (externally managed environment)"
     else
         echo -e "${GREEN}✓ adafruit-circuitpython-ht16k33 already installed${NC}"
-    fi
-
-    # Install development tools (optional - may fail on externally managed environments)
-    echo -e "${CYAN}Installing Python development tools...${NC}"
-    if ! python_module_available flake8; then
-        echo "Attempting to install flake8 (may fail on externally managed environments)..."
-        pip3 install --user flake8 2>/dev/null || echo "flake8 installation skipped (externally managed environment)"
-    else
-        echo -e "${GREEN}✓ flake8 already installed${NC}"
     fi
 
     # Install shellcheck for bash script validation
@@ -335,9 +326,17 @@ if [[ "$HARDWARE_CONFIG_NEEDED" == "true" ]] || [[ "$SKIP_PACKAGES" == "false" ]
         sudo usermod -a -G gpio "$USER"
     fi
 
-    echo -e "${GREEN}✓ I2C and GPIO interfaces configured successfully!${NC}"
+    # Add user to dialout group (needed for /dev/ttyACM0 Meshtastic USB access)
+    if groups "$USER" | grep -q dialout; then
+        echo -e "${GREEN}✓ User already in dialout group${NC}"
+    else
+        echo "Adding user to dialout group..."
+        sudo usermod -a -G dialout "$USER"
+    fi
+
+    echo -e "${GREEN}✓ I2C, GPIO, and dialout interfaces configured successfully!${NC}"
 else
-    echo -e "${GREEN}✓ I2C and GPIO interfaces already configured${NC}"
+    echo -e "${GREEN}✓ I2C, GPIO, and dialout interfaces already configured${NC}"
 fi
 
 # Check if GPS daemon configuration is needed
@@ -586,6 +585,70 @@ EOF
     fi
 else
     echo -e "${GREEN}✓ RPI-Clock service already configured${NC}"
+fi
+
+# Step 10: Meshtastic GPS forwarder (venv + service)
+MESHTASTIC_NEEDED=false
+if [[ ! -f /opt/rpi-clock/venv/bin/python3 ]] || [[ ! -f /etc/systemd/system/meshtastic-gps-forwarder.service ]]; then
+    MESHTASTIC_NEEDED=true
+fi
+
+if [[ "$MESHTASTIC_NEEDED" == "true" ]] || [[ "$SKIP_PACKAGES" == "false" ]]; then
+    echo ""
+    echo -e "${CYAN}Step 10: Setting up Meshtastic GPS forwarder...${NC}"
+
+    # Create Python venv for meshtastic (isolated to avoid system package conflicts)
+    if [[ ! -f /opt/rpi-clock/venv/bin/python3 ]]; then
+        echo "Creating Python virtual environment at /opt/rpi-clock/venv..."
+        sudo python3 -m venv /opt/rpi-clock/venv
+        echo -e "${GREEN}✓ Virtual environment created${NC}"
+    else
+        echo -e "${GREEN}✓ Virtual environment already exists${NC}"
+    fi
+
+    # Install meshtastic Python library in venv
+    if ! sudo /opt/rpi-clock/venv/bin/python3 -c "import meshtastic" 2>/dev/null; then
+        echo "Installing meshtastic Python library..."
+        sudo /opt/rpi-clock/venv/bin/pip install --quiet meshtastic
+        echo -e "${GREEN}✓ meshtastic installed${NC}"
+    else
+        echo -e "${GREEN}✓ meshtastic already installed${NC}"
+    fi
+
+    # Copy GPS inject script
+    if [[ -f gps-meshtastic-inject.py ]]; then
+        sudo cp gps-meshtastic-inject.py /opt/rpi-clock/
+        sudo chmod 644 /opt/rpi-clock/gps-meshtastic-inject.py
+        echo -e "${GREEN}✓ Installed gps-meshtastic-inject.py${NC}"
+    fi
+
+    # Install meshtastic GPS forwarder service, substituting current username
+    if [[ -f meshtastic-gps-forwarder.service ]]; then
+        sed "s/User=jeff/User=$USER/" meshtastic-gps-forwarder.service \
+            | sudo tee /etc/systemd/system/meshtastic-gps-forwarder.service > /dev/null
+        sudo systemctl daemon-reload
+        if ! systemctl is-enabled --quiet meshtastic-gps-forwarder.service; then
+            sudo systemctl enable meshtastic-gps-forwarder.service
+            echo -e "${GREEN}✓ meshtastic-gps-forwarder.service enabled${NC}"
+        else
+            echo -e "${GREEN}✓ meshtastic-gps-forwarder.service already enabled${NC}"
+        fi
+    fi
+else
+    echo -e "${GREEN}✓ Meshtastic GPS forwarder already configured${NC}"
+fi
+
+# Step 11: Apply kernel parameter optimizations for SD card and low-RAM operation
+if [[ ! -f /etc/sysctl.d/99-rpi-clock.conf ]]; then
+    echo ""
+    echo -e "${CYAN}Step 11: Applying system kernel optimizations...${NC}"
+    if [[ -f sysctl/99-rpi-clock.conf ]]; then
+        sudo cp sysctl/99-rpi-clock.conf /etc/sysctl.d/
+        sudo sysctl --system > /dev/null 2>&1
+        echo -e "${GREEN}✓ Kernel parameters applied (SD card + low-RAM tuning)${NC}"
+    fi
+else
+    echo -e "${GREEN}✓ System kernel optimizations already applied${NC}"
 fi
 
 # Check if services need to be started
