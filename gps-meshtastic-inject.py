@@ -16,25 +16,27 @@ import subprocess
 import sys
 import time
 import signal
-from typing import Optional
+import types
+from typing import Any, Optional
 
-MESHTASTIC_PORT = '/dev/ttyACM0'
-MIN_FIX_MODE = 2        # 2=2D fix minimum, 3=3D
-UPDATE_INTERVAL = 120   # seconds between position pushes
-RETRY_DELAY = 15        # seconds to wait before reconnect attempt
+MESHTASTIC_PORT = "/dev/ttyACM0"
+MIN_FIX_MODE = 2  # 2=2D fix minimum, 3=3D
+UPDATE_INTERVAL = 120  # seconds between position pushes
+RETRY_DELAY = 15  # seconds to wait before reconnect attempt
 
 running = True
 iface = None
 
 
-def signal_handler(sig: int, frame) -> None:
+def signal_handler(sig: int, frame: Optional[types.FrameType]) -> None:
     global running
     running = False
     sys.exit(0)
 
 
-def connect_radio():
+def connect_radio() -> Optional[Any]:
     import meshtastic.serial_interface
+
     try:
         radio = meshtastic.serial_interface.SerialInterface(MESHTASTIC_PORT)
         print(f"✓ Connected to Meshtastic radio on {MESHTASTIC_PORT}")
@@ -44,13 +46,10 @@ def connect_radio():
         return None
 
 
-def inject_position(radio, lat: float, lon: float, alt: float) -> bool:
+def inject_position(radio: Any, lat: float, lon: float, alt: float) -> bool:
     try:
         radio.localNode.setFixedPosition(lat, lon, int(alt))
-        print(
-            f"✓ Position injected: {lat:.6f}, {lon:.6f}, "
-            f"alt={int(alt)}m MSL"
-        )
+        print(f"✓ Position injected: {lat:.6f}, {lon:.6f}, " f"alt={int(alt)}m MSL")
         return True
     except Exception as e:
         print(f"✗ Failed to inject position: {e}")
@@ -72,7 +71,7 @@ def main() -> None:
 
     try:
         proc = subprocess.Popen(
-            ['gpspipe', '-w'],
+            ["gpspipe", "-w"],
             stdout=subprocess.PIPE,
             stderr=subprocess.DEVNULL,
             text=True,
@@ -83,6 +82,8 @@ def main() -> None:
         print(f"✗ Failed to start gpspipe: {e}")
         print("  Is gpsd running?  sudo systemctl status gpsd")
         sys.exit(1)
+
+    assert proc.stdout is not None
 
     last_update: float = 0
     updates_sent: int = 0
@@ -101,13 +102,13 @@ def main() -> None:
         except json.JSONDecodeError:
             continue
 
-        if msg.get('class') != 'TPV':
+        if msg.get("class") != "TPV":
             continue
 
-        mode = msg.get('mode', 0)
-        lat = msg.get('lat')
-        lon = msg.get('lon')
-        alt = float(msg.get('altMSL', msg.get('alt', 0.0)))
+        mode = msg.get("mode", 0)
+        lat = msg.get("lat")
+        lon = msg.get("lon")
+        alt = float(msg.get("altMSL", msg.get("alt", 0.0)))
 
         if mode < MIN_FIX_MODE or lat is None or lon is None:
             if not waiting_for_fix:

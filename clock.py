@@ -15,33 +15,47 @@ import os
 import sys
 import time
 import signal
-from typing import Optional, Tuple, Dict, Any
+import types
+from pathlib import Path
+from typing import Callable, Optional, Tuple, Dict, Any
 
 # Change to /tmp directory to avoid GPIO permission issues
 # The lgpio library tries to create notification files in the current working directory
 # /opt/rpi-clock has restrictive permissions, so we switch to system temp directory
-os.chdir('/tmp')
+os.chdir("/tmp")
 
 
 # Constants - avoid repeated lookups
 API_REFRESH_CYCLES: int = 10
 API_ENDPOINT: str = "https://api.openweathermap.org/data/2.5/weather"
-CONFIG_FILE: str = '/opt/rpi-clock/config.ini'
+CONFIG_FILE: str = "/opt/rpi-clock/config.ini"
 
 # Pre-compile regex patterns and cache config values
 config: configparser.ConfigParser = configparser.ConfigParser()
-config.read_dict({
-    'Weather': {'api_key': 'your_api_key_here', 'zip_code': 'your_zip_code_here'},
-    'Display': {'time_format': '12', 'temp_unit': 'C', 'smooth_scroll': 'false', 'brightness': '0.8'},
-    'NTP': {'preferred_server': '127.0.0.1'},
-    'Cycle': {
-        'time_display': '2', 'temp_display': '3',
-        'feels_like_display': '3', 'humidity_display': '2'
-    },
-    'CustomText': {
-        'enabled': 'false', 'text': '', 'interval_minutes': '15', 'display_duration': '3'
+config.read_dict(
+    {
+        "Weather": {"api_key": "your_api_key_here", "zip_code": "your_zip_code_here"},
+        "Display": {
+            "time_format": "12",
+            "temp_unit": "C",
+            "smooth_scroll": "false",
+            "brightness": "0.8",
+        },
+        "NTP": {"preferred_server": "127.0.0.1"},
+        "Cycle": {
+            "time_display": "2",
+            "temp_display": "3",
+            "feels_like_display": "3",
+            "humidity_display": "2",
+        },
+        "CustomText": {
+            "enabled": "false",
+            "text": "",
+            "interval_minutes": "15",
+            "display_duration": "3",
+        },
     }
-})
+)
 config.read(CONFIG_FILE)
 
 
@@ -54,104 +68,106 @@ def validate_config() -> bool:
     errors = []
 
     # Check if config file exists and was read
-    if not os.path.exists(CONFIG_FILE):
+    if not Path(CONFIG_FILE).exists():
         errors.append(f"Configuration file not found: {CONFIG_FILE}")
         return False
 
     # Validate required sections
-    required_sections = ['Weather', 'Display', 'NTP', 'Cycle', 'CustomText']
+    required_sections = ["Weather", "Display", "NTP", "Cycle", "CustomText"]
     for section in required_sections:
         if not config.has_section(section):
             errors.append(f"Missing configuration section: [{section}]")
 
     # Validate Weather section
-    if config.has_section('Weather'):
-        if not config.get('Weather', 'api_key', fallback='').strip():
+    if config.has_section("Weather"):
+        if not config.get("Weather", "api_key", fallback="").strip():
             errors.append(
                 "Weather API key is empty - get one from "
                 "https://openweathermap.org/api_keys/"
             )
-        elif config.get('Weather', 'api_key', fallback='') == \
-                'your_openweathermap_api_key_here':
-            errors.append(
-                "Weather API key not configured - please edit config.ini"
-            )
+        elif (
+            config.get("Weather", "api_key", fallback="")
+            == "your_openweathermap_api_key_here"
+        ):
+            errors.append("Weather API key not configured - please edit config.ini")
 
-        zip_code = config.get('Weather', 'zip_code', fallback='')
+        zip_code = config.get("Weather", "zip_code", fallback="")
         if not zip_code.strip():
             errors.append("ZIP code is empty - please configure your location")
-        elif zip_code == 'your_zip_code_here':
+        elif zip_code == "your_zip_code_here":
             errors.append("ZIP code not configured - please edit config.ini")
         elif not zip_code.isdigit() or len(zip_code) != 5:
             errors.append("ZIP code must be 5 digits")
 
     # Validate Display section
-    if config.has_section('Display'):
-        time_format = config.get('Display', 'time_format', fallback='')
-        if time_format not in ['12', '24']:
+    if config.has_section("Display"):
+        time_format = config.get("Display", "time_format", fallback="")
+        if time_format not in ["12", "24"]:
             errors.append("time_format must be '12' or '24'")
 
-        temp_unit = config.get('Display', 'temp_unit', fallback='')
-        if temp_unit not in ['C', 'F']:
+        temp_unit = config.get("Display", "temp_unit", fallback="")
+        if temp_unit not in ["C", "F"]:
             errors.append("temp_unit must be 'C' or 'F'")
 
-        smooth_scroll = config.get('Display', 'smooth_scroll', fallback='')
-        if smooth_scroll.lower() not in ['true', 'false']:
+        smooth_scroll = config.get("Display", "smooth_scroll", fallback="")
+        if smooth_scroll.lower() not in ["true", "false"]:
             errors.append("smooth_scroll must be 'true' or 'false'")
 
-        brightness = config.get('Display', 'brightness', fallback='')
+        brightness = config.get("Display", "brightness", fallback="")
         try:
             brightness_val = float(brightness)
             if brightness_val < 0.0 or brightness_val > 1.0:
                 errors.append("brightness must be between 0.0 and 1.0")
         except (ValueError, TypeError):
-            errors.append(
-                "brightness must be a valid number between 0.0 and 1.0")
+            errors.append("brightness must be a valid number between 0.0 and 1.0")
 
     # Validate Cycle section
-    if config.has_section('Cycle'):
+    if config.has_section("Cycle"):
         cycle_options = [
-            'time_display', 'temp_display',
-            'feels_like_display', 'humidity_display'
+            "time_display",
+            "temp_display",
+            "feels_like_display",
+            "humidity_display",
         ]
         for option in cycle_options:
             try:
-                value = config.getint('Cycle', option)
+                value = config.getint("Cycle", option)
                 if value < 1 or value > 60:
                     errors.append(f"{option} must be between 1 and 60 seconds")
             except (ValueError, TypeError):
                 errors.append(f"{option} must be a valid integer")
 
     # Validate CustomText section
-    if config.has_section('CustomText'):
-        enabled = config.get('CustomText', 'enabled', fallback='')
-        if enabled.lower() not in ['true', 'false']:
+    if config.has_section("CustomText"):
+        enabled = config.get("CustomText", "enabled", fallback="")
+        if enabled.lower() not in ["true", "false"]:
             errors.append("CustomText enabled must be 'true' or 'false'")
-        elif enabled.lower() == 'true':
-            custom_text = config.get('CustomText', 'text', fallback='')
+        elif enabled.lower() == "true":
+            custom_text = config.get("CustomText", "text", fallback="")
             if not custom_text.strip():
                 errors.append("CustomText text cannot be empty when enabled")
             elif len(custom_text) > 50:
                 errors.append(
-                    "CustomText text should be 50 characters or less for optimal display")
+                    "CustomText text should be 50 characters or less for optimal display"
+                )
 
             try:
-                interval = config.getint('CustomText', 'interval_minutes')
+                interval = config.getint("CustomText", "interval_minutes")
                 if interval < 1 or interval > 1440:  # 1 minute to 24 hours
                     errors.append(
-                        "CustomText interval_minutes must be between 1 and 1440")
+                        "CustomText interval_minutes must be between 1 and 1440"
+                    )
             except (ValueError, TypeError):
-                errors.append(
-                    "CustomText interval_minutes must be a valid integer")
+                errors.append("CustomText interval_minutes must be a valid integer")
 
             try:
-                duration = config.getint('CustomText', 'display_duration')
+                duration = config.getint("CustomText", "display_duration")
                 if duration < 1 or duration > 60:
                     errors.append(
-                        "CustomText display_duration must be between 1 and 60 seconds")
+                        "CustomText display_duration must be between 1 and 60 seconds"
+                    )
             except (ValueError, TypeError):
-                errors.append(
-                    "CustomText display_duration must be a valid integer")
+                errors.append("CustomText display_duration must be a valid integer")
 
     # Print errors if any
     if errors:
@@ -171,28 +187,28 @@ if not validate_config():
     sys.exit(1)
 
 # Cache all config values at startup
-API_KEY: str = config['Weather']['api_key']
-ZIP_CODE: str = config['Weather']['zip_code']
-TIME_FORMAT: str = config['Display']['time_format']
-TEMP_UNIT: str = config['Display']['temp_unit']
-SMOOTH_SCROLL: bool = config.getboolean('Display', 'smooth_scroll')
-BRIGHTNESS: float = config.getfloat('Display', 'brightness')
-PREFERRED_NTP_SERVER: str = config['NTP']['preferred_server']
-TIME_DISPLAY: int = config.getint('Cycle', 'time_display')
-TEMP_DISPLAY: int = config.getint('Cycle', 'temp_display')
-FEELS_LIKE_DISPLAY: int = config.getint('Cycle', 'feels_like_display')
-HUMIDITY_DISPLAY: int = config.getint('Cycle', 'humidity_display')
-CUSTOM_TEXT_ENABLED: bool = config.getboolean('CustomText', 'enabled')
-CUSTOM_TEXT: str = config.get('CustomText', 'text', fallback='')
-CUSTOM_TEXT_INTERVAL: int = config.getint('CustomText', 'interval_minutes')
-CUSTOM_TEXT_DURATION: int = config.getint('CustomText', 'display_duration')
+API_KEY: str = config["Weather"]["api_key"]
+ZIP_CODE: str = config["Weather"]["zip_code"]
+TIME_FORMAT: str = config["Display"]["time_format"]
+TEMP_UNIT: str = config["Display"]["temp_unit"]
+SMOOTH_SCROLL: bool = config.getboolean("Display", "smooth_scroll")
+BRIGHTNESS: float = config.getfloat("Display", "brightness")
+PREFERRED_NTP_SERVER: str = config["NTP"]["preferred_server"]
+TIME_DISPLAY: int = config.getint("Cycle", "time_display")
+TEMP_DISPLAY: int = config.getint("Cycle", "temp_display")
+FEELS_LIKE_DISPLAY: int = config.getint("Cycle", "feels_like_display")
+HUMIDITY_DISPLAY: int = config.getint("Cycle", "humidity_display")
+CUSTOM_TEXT_ENABLED: bool = config.getboolean("CustomText", "enabled")
+CUSTOM_TEXT: str = config.get("CustomText", "text", fallback="")
+CUSTOM_TEXT_INTERVAL: int = config.getint("CustomText", "interval_minutes")
+CUSTOM_TEXT_DURATION: int = config.getint("CustomText", "display_duration")
 
 # Pre-compute conversion factor
-C_TO_F_FACTOR: float = 9/5  # Avoid repeated division
-SCROLL_DELAY: float = 0.12   # Seconds per marquee step for smooth feel
+C_TO_F_FACTOR: float = 9 / 5  # Avoid repeated division
+SCROLL_DELAY: float = 0.12  # Seconds per marquee step for smooth feel
 
 # Global variables
-cached_weather_info: Optional[Tuple[int, int, int]] = None
+cached_weather_info: Optional[Tuple[float, float, int]] = None
 display: Optional[segments.Seg7x4] = None
 ntp_client: Optional[ntplib.NTPClient] = None  # Reuse NTP client
 SESSION: Optional[requests.Session] = None  # Reusable HTTP session
@@ -227,13 +243,13 @@ def check_hardware_prerequisites() -> bool:
 
     # Check if I2C modules are loaded
     try:
-        with open('/proc/modules', 'r') as f:
+        with open("/proc/modules", "r") as f:
             modules = f.read()
-        if 'i2c_dev' not in modules:
+        if "i2c_dev" not in modules:
             print("✗ I2C device module not loaded")
             print("  Run: sudo modprobe i2c_dev")
             return False
-        if 'i2c_bcm2835' not in modules:
+        if "i2c_bcm2835" not in modules:
             print("✗ I2C BCM2835 module not loaded")
             print("  Run: sudo modprobe i2c_bcm2835")
             return False
@@ -242,7 +258,7 @@ def check_hardware_prerequisites() -> bool:
         return False
 
     # Check if I2C device files exist
-    if not os.path.exists('/dev/i2c-1'):
+    if not Path("/dev/i2c-1").exists():
         print("✗ I2C device file /dev/i2c-1 not found")
         print("  I2C interface may not be enabled")
         print("  Run: sudo raspi-config nonint do_i2c 0")
@@ -252,7 +268,8 @@ def check_hardware_prerequisites() -> bool:
     # Check if user has I2C permissions
     try:
         import grp
-        i2c_group = grp.getgrnam('i2c')
+
+        i2c_group = grp.getgrnam("i2c")
         if i2c_group.gr_gid not in os.getgroups():
             print("✗ User not in i2c group")
             print("  Run: sudo usermod -a -G i2c $USER")
@@ -288,8 +305,7 @@ def scan_i2c_devices() -> bool:
             print("  - SCL (white) → Pi pin 5 (GPIO 3)")
             return False
 
-        print(
-            f"✓ Found I2C devices at addresses: {[hex(addr) for addr in devices]}")
+        print(f"✓ Found I2C devices at addresses: {[hex(addr) for addr in devices]}")
 
         if 0x70 in devices:
             print("✓ Display found at address 0x70")
@@ -352,7 +368,8 @@ def initialize_display() -> bool:
         display = segments.Seg7x4(i2c)
         display.brightness = BRIGHTNESS
         print(
-            f"✓ 7-segment display initialized successfully (brightness: {BRIGHTNESS})")
+            f"✓ 7-segment display initialized successfully (brightness: {BRIGHTNESS})"
+        )
 
         # Test the display with a simple message
         display.fill(0)
@@ -424,9 +441,7 @@ def initialize_http_session() -> bool:
     global SESSION, WEATHER_PARAMS
     try:
         SESSION = requests.Session()
-        WEATHER_PARAMS = {
-            "zip": ZIP_CODE, "appid": API_KEY, "units": "metric"
-        }
+        WEATHER_PARAMS = {"zip": ZIP_CODE, "appid": API_KEY, "units": "metric"}
         print("✓ HTTP session initialized successfully")
         return True
     except Exception as e:
@@ -501,7 +516,7 @@ def display_time() -> None:
 
     now = time.localtime()
     hour = now.tm_hour
-    if TIME_FORMAT == '12':
+    if TIME_FORMAT == "12":
         hour = hour % 12 or 12  # More efficient than if/else
     minute = now.tm_min
 
@@ -546,7 +561,7 @@ def scroll_combined_label_value(
     last_display_text = None
 
 
-def fetch_weather() -> Optional[Tuple[int, int, int]]:
+def fetch_weather() -> Optional[Tuple[float, float, int]]:
     """Fetch weather with optimized retry logic.
 
     Returns:
@@ -561,30 +576,28 @@ def fetch_weather() -> Optional[Tuple[int, int, int]]:
     for attempt in range(max_retries):
         try:
             if SESSION is None:
-                response = requests.get(
-                    API_ENDPOINT, params=params, timeout=10)
+                response = requests.get(API_ENDPOINT, params=params, timeout=10)
             else:
-                response = SESSION.get(
-                    API_ENDPOINT, params=params, timeout=10)
+                response = SESSION.get(API_ENDPOINT, params=params, timeout=10)
             response.raise_for_status()
             weather_data = response.json()
 
-            # Extract data once
+            # Extract data once; keep floats through unit conversion so
+            # celsius_to_fahrenheit receives precise values, not pre-rounded ints
             main_data = weather_data["main"]
-            temperature = int(round(main_data["temp"]))
-            feels_like = int(round(main_data["feels_like"]))
-            humidity = int(round(main_data["humidity"]))
+            temperature: float = float(main_data["temp"])
+            feels_like: float = float(main_data["feels_like"])
+            humidity: int = int(round(main_data["humidity"]))
 
             # Convert units if needed
-            if TEMP_UNIT == 'F':
+            if TEMP_UNIT == "F":
                 temperature = celsius_to_fahrenheit(temperature)
                 feels_like = celsius_to_fahrenheit(feels_like)
 
             return temperature, feels_like, humidity
 
         except requests.exceptions.Timeout:
-            print(
-                f"✗ Weather API timeout (attempt {attempt + 1}/{max_retries})")
+            print(f"✗ Weather API timeout (attempt {attempt + 1}/{max_retries})")
             if attempt < max_retries - 1:
                 time.sleep(retry_delay)
             else:
@@ -618,6 +631,7 @@ def fetch_weather() -> Optional[Tuple[int, int, int]]:
             print(f"✗ Weather data parsing error: {e}")
             print("  Weather API response format may have changed")
             return None
+    return None
 
 
 def get_current_time() -> time.struct_time:
@@ -628,8 +642,7 @@ def get_current_time() -> time.struct_time:
     """
     try:
         if ntp_client:
-            response = ntp_client.request(
-                PREFERRED_NTP_SERVER, version=3, timeout=5)
+            response = ntp_client.request(PREFERRED_NTP_SERVER, version=3, timeout=5)
             return time.localtime(response.tx_time)
     except ntplib.NTPException as e:
         print(f"✗ NTP synchronization failed: {e}")
@@ -640,7 +653,7 @@ def get_current_time() -> time.struct_time:
 
 
 def display_metric_with_message(
-    message: str, display_function: Any, *args: Any, delay: int = 2
+    message: str, display_function: Callable[..., None], *args: Any, delay: int = 2
 ) -> None:
     """Display metric with optimized timing.
 
@@ -771,7 +784,7 @@ def main_loop() -> None:
 
                 if not display:
                     now_str = time.strftime(
-                        "%I:%M %p" if TIME_FORMAT == '12' else "%H:%M"
+                        "%I:%M %p" if TIME_FORMAT == "12" else "%H:%M"
                     )
                     print(
                         f"[{now_str}] "
@@ -783,20 +796,21 @@ def main_loop() -> None:
                 if SMOOTH_SCROLL:
                     # Scroll label + value together for a ticker feel
                     scroll_combined_label_value(
-                        'Out', build_temp_string(temperature, TEMP_UNIT)
+                        "Out", build_temp_string(temperature, TEMP_UNIT)
                     )
                     scroll_combined_label_value(
-                        'FEEL', build_temp_string(feels_like, TEMP_UNIT)
+                        "FEEL", build_temp_string(feels_like, TEMP_UNIT)
                     )
-                    scroll_combined_label_value(
-                        'rH', f"{int(round(humidity)):02d}")
+                    scroll_combined_label_value("rH", f"{int(round(humidity)):02d}")
                 else:
                     # Original stepwise messaging
                     display_metric_with_message(
-                        'Out', display_temperature, temperature, TEMP_UNIT)
+                        "Out", display_temperature, temperature, TEMP_UNIT
+                    )
                     time.sleep(TEMP_DISPLAY)
                     display_metric_with_message(
-                        'feel', display_temperature, feels_like, TEMP_UNIT)
+                        "feel", display_temperature, feels_like, TEMP_UNIT
+                    )
                     time.sleep(FEELS_LIKE_DISPLAY)
                     display_humidity(humidity)
                     time.sleep(HUMIDITY_DISPLAY)
@@ -834,8 +848,7 @@ if __name__ == "__main__":
     if not ntp_ok:
         warnings.append("NTP client failed - time sync may be limited")
     if not http_ok:
-        warnings.append(
-            "HTTP session failed - weather data may be unavailable")
+        warnings.append("HTTP session failed - weather data may be unavailable")
 
     if warnings:
         print("\n⚠️  Warnings:")
