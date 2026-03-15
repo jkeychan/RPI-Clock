@@ -8,10 +8,13 @@ A Raspberry Pi-based clock with GPS time synchronization and weather display usi
 
 ## Features
 
-- **GPS Time Synchronization**: Uses Adafruit Ultimate GPS HAT for precise timekeeping
+- **GPS Time Synchronization**: Uses Adafruit Ultimate GPS HAT with PPS signal for stratum-1 precision timekeeping
+- **NTP Server**: Serves accurate GPS+PPS-disciplined time to your local network (or NTP Pool)
 - **Weather Display**: Shows current temperature, feels-like temperature, and humidity
 - **7-Segment Display**: Clean, readable LED display with scrolling text
 - **Custom Text Display**: Configurable custom messages that scroll across the display at set intervals
+- **Meshtastic Integration**: Injects GPS position into a RAK11310 LoRa mesh radio via USB
+- **Headless Operation**: Display hardware is optional — runs without the 7-segment display connected
 - **Configurable**: Customizable time format, temperature units, display cycles, and custom text
 - **Modular Design**: Easy to assemble and modify with plug-and-play connections
 
@@ -32,7 +35,8 @@ A Raspberry Pi-based clock with GPS time synchronization and weather display usi
 
 ### Optional Components
 
-- **Micro-USB OTG Adapter** (for future Meshtastic integration)
+- **RAK11310 WisBlock Meshtastic Module** (USB connection to Pi via Micro-USB OTG adapter) — for LoRa mesh GPS position broadcasting
+- **Micro-USB OTG Adapter** (required if using Meshtastic)
 - **Project Enclosure** (for permanent installation)
 - **Heat Shrink Tubing** (for cable management)
 
@@ -657,7 +661,6 @@ sudo systemctl daemon-reload
 
 ## Future Enhancements
 
-- **Meshtastic Integration**: Add LoRa mesh networking capabilities
 - **Multiple Displays**: Support for additional 7-segment displays
 - **Web Interface**: Remote configuration and monitoring
 - **Data Logging**: Historical weather and time data

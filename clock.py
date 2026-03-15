@@ -723,12 +723,8 @@ def main_loop() -> None:
     cycle_counter = 0
     global cached_weather_info
 
-    # This should never happen due to startup checks, but just in case
     if not display:
-        print("✗ CRITICAL ERROR: Display is None in main loop")
-        print("  This should not happen - display was initialized successfully")
-        print("  Exiting to prevent further errors")
-        sys.exit(1)
+        print("⚠  Running without display - logging weather/time to console only")
 
     while True:
         try:
@@ -746,8 +742,9 @@ def main_loop() -> None:
             next_tick = time.monotonic()
             while seconds_elapsed < total_seconds:
                 colon_on = not colon_on
-                display.colon = colon_on
-                display.show()
+                if display:
+                    display.colon = colon_on
+                    display.show()
 
                 # Update time at minute change without redrawing otherwise
                 now_struct = time.localtime()
@@ -771,6 +768,17 @@ def main_loop() -> None:
 
             if cached_weather_info:
                 temperature, feels_like, humidity = cached_weather_info
+
+                if not display:
+                    now_str = time.strftime(
+                        "%I:%M %p" if TIME_FORMAT == '12' else "%H:%M"
+                    )
+                    print(
+                        f"[{now_str}] "
+                        f"Temp: {int(temperature)}{TEMP_UNIT}  "
+                        f"Feels: {int(feels_like)}{TEMP_UNIT}  "
+                        f"Humidity: {int(round(humidity))}%"
+                    )
 
                 if SMOOTH_SCROLL:
                     # Scroll label + value together for a ticker feel
@@ -817,43 +825,12 @@ if __name__ == "__main__":
     ntp_ok = initialize_ntp()
     http_ok = initialize_http_session()
 
-    # Check if critical components failed
-    if not display_ok:
-        print("\n" + "=" * 60)
-        print("✗ CRITICAL ERROR: Display initialization failed")
-        print("=" * 60)
-        print("The clock cannot start without a working display.")
-        print("")
-        print("Hardware troubleshooting steps:")
-        print("1. Check your wiring connections:")
-        print("   - VIN (red) → Pi pin 2 (5V)")
-        print("   - IO (orange) → Pi pin 1 (3.3V) - REQUIRED")
-        print("   - GND (black) → Pi pin 6 (GND)")
-        print("   - SDA (yellow) → Pi pin 3 (GPIO 2)")
-        print("   - SCL (white) → Pi pin 5 (GPIO 3)")
-        print("   - COMMON ISSUE: SDA and SCL wires are easily confused!")
-        print("     Try swapping SDA (yellow) and SCL (white) wires")
-        print("")
-        print("2. Verify I2C is enabled:")
-        print("   sudo raspi-config nonint do_i2c 0")
-        print("   sudo reboot")
-        print("")
-        print("3. Check user permissions:")
-        print("   sudo usermod -a -G i2c $USER")
-        print("   # Then logout and login again")
-        print("")
-        print("4. Run diagnostic script:")
-        print("   ./i2c-test.sh")
-        print("")
-        print("5. Check service logs:")
-        print("   sudo journalctl -u rpi-clock.service -f")
-        print("")
-        print("For detailed troubleshooting, see TROUBLESHOOTING.md")
-        print("=" * 60)
-        sys.exit(1)
-
     # Warn about non-critical failures
     warnings = []
+    if not display_ok:
+        warnings.append(
+            "Display not found - running headless (check wiring or run i2c-test.sh)"
+        )
     if not ntp_ok:
         warnings.append("NTP client failed - time sync may be limited")
     if not http_ok:
@@ -865,8 +842,9 @@ if __name__ == "__main__":
         for warning in warnings:
             print(f"  - {warning}")
         print("  Clock will continue with limited functionality")
+    else:
+        print("\n✓ All components initialized successfully")
 
-    print("\n✓ All critical components initialized successfully")
     print("Starting Raspberry Pi Clock...")
     print("=" * 60)
 
