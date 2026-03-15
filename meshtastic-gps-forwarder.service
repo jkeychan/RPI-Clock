@@ -1,5 +1,5 @@
 [Unit]
-Description=GPS Forwarder for Meshtastic RAK11300
+Description=Meshtastic GPS Position Injector
 After=network.target gpsd.service
 Wants=gpsd.service
 
@@ -8,12 +8,12 @@ Type=simple
 User=jeff
 Group=dialout
 WorkingDirectory=/opt/rpi-clock
-ExecStart=/usr/bin/python3 /opt/rpi-clock/gps-forward-gpio-direct.py
+ExecStart=/opt/rpi-clock/venv/bin/python3 -u /opt/rpi-clock/gps-meshtastic-inject.py
 Restart=always
 RestartSec=10
 StandardOutput=journal
 StandardError=journal
+SyslogIdentifier=meshtastic-gps
 
 [Install]
 WantedBy=multi-user.target
-
