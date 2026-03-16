@@ -80,15 +80,13 @@ def validate_config() -> bool:
 
     # Validate Weather section
     if config.has_section("Weather"):
-        if not config.get("Weather", "api_key", fallback="").strip():
+        api_key = config.get("Weather", "api_key", fallback="")
+        if not api_key.strip():
             errors.append(
                 "Weather API key is empty - get one from "
                 "https://openweathermap.org/api_keys/"
             )
-        elif (
-            config.get("Weather", "api_key", fallback="")
-            == "your_openweathermap_api_key_here"
-        ):
+        elif api_key == "your_openweathermap_api_key_here":
             errors.append("Weather API key not configured - please edit config.ini")
 
         zip_code = config.get("Weather", "zip_code", fallback="")
@@ -202,6 +200,7 @@ CUSTOM_TEXT_ENABLED: bool = config.getboolean("CustomText", "enabled")
 CUSTOM_TEXT: str = config.get("CustomText", "text", fallback="")
 CUSTOM_TEXT_INTERVAL: int = config.getint("CustomText", "interval_minutes")
 CUSTOM_TEXT_DURATION: int = config.getint("CustomText", "display_duration")
+CUSTOM_TEXT_INTERVAL_SECONDS: int = CUSTOM_TEXT_INTERVAL * 60
 
 # Pre-compute conversion factor
 C_TO_F_FACTOR: float = 9 / 5  # Avoid repeated division
@@ -495,18 +494,10 @@ def build_temp_string(temp: float, unit: str) -> str:
 
 
 def display_temperature(temp: float, unit: str) -> None:
-    """Display temperature with minimal string operations."""
+    """Display temperature on the 7-segment display."""
     if not display:
         return
-
-    # Use integer formatting for better performance
-    if temp < 0:
-        temp_str = f"-{int(abs(temp))}{unit}"
-    else:
-        temp_str = f"{int(temp)}{unit}"
-
-    # Truncate and pad in one operation
-    write_display(temp_str[:4].rjust(4))
+    write_display(build_temp_string(temp, unit)[:4].rjust(4))
 
 
 def display_time() -> None:
@@ -721,10 +712,7 @@ def should_display_custom_text() -> bool:
         return True
 
     # Check if enough time has passed
-    time_since_last = current_time - last_custom_text_time
-    interval_seconds = CUSTOM_TEXT_INTERVAL * 60
-
-    if time_since_last >= interval_seconds:
+    if current_time - last_custom_text_time >= CUSTOM_TEXT_INTERVAL_SECONDS:
         last_custom_text_time = current_time
         return True
 

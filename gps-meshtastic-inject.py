@@ -17,7 +17,10 @@ import sys
 import time
 import signal
 import types
-from typing import Any, Optional
+from typing import TYPE_CHECKING, Any, Optional
+
+if TYPE_CHECKING:
+    from meshtastic.serial_interface import SerialInterface
 
 MESHTASTIC_PORT = "/dev/ttyACM0"
 MIN_FIX_MODE = 2  # 2=2D fix minimum, 3=3D
@@ -25,7 +28,7 @@ UPDATE_INTERVAL = 120  # seconds between position pushes
 RETRY_DELAY = 15  # seconds to wait before reconnect attempt
 
 running = True
-iface = None
+iface: Optional["SerialInterface"] = None
 
 
 def signal_handler(sig: int, frame: Optional[types.FrameType]) -> None:
@@ -34,7 +37,7 @@ def signal_handler(sig: int, frame: Optional[types.FrameType]) -> None:
     sys.exit(0)
 
 
-def connect_radio() -> Optional[Any]:
+def connect_radio() -> Optional["SerialInterface"]:
     import meshtastic.serial_interface
 
     try:
@@ -46,7 +49,9 @@ def connect_radio() -> Optional[Any]:
         return None
 
 
-def inject_position(radio: Any, lat: float, lon: float, alt: float) -> bool:
+def inject_position(
+    radio: "SerialInterface", lat: float, lon: float, alt: float
+) -> bool:
     try:
         radio.localNode.setFixedPosition(lat, lon, int(alt))
         print(f"✓ Position injected: {lat:.6f}, {lon:.6f}, " f"alt={int(alt)}m MSL")
