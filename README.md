@@ -1,5 +1,7 @@
 # RPI-Clock
 
+[![Tests](https://github.com/jkeychan/RPI-Clock/actions/workflows/test.yml/badge.svg)](https://github.com/jkeychan/RPI-Clock/actions/workflows/test.yml)
+
 ![Vector logo of a Raspberry made to look like it has a digital display and futuristic](rpi-clock-logo.png)
 
 A Raspberry Pi-based clock with GPS time synchronization and weather display using a 7-segment LED display. This project combines accurate GPS timekeeping with local weather information for a comprehensive desktop clock solution.
@@ -37,6 +39,8 @@ A Raspberry Pi-based clock with GPS time synchronization and weather display usi
 
 - **RAK11310 WisBlock Meshtastic Module** (USB connection to Pi via Micro-USB OTG adapter) — for LoRa mesh GPS position broadcasting
 - **Micro-USB OTG Adapter** (required if using Meshtastic)
+
+See [MESHTASTIC_GPS.md](MESHTASTIC_GPS.md) for setup and configuration details.
 - **Project Enclosure** (for permanent installation)
 - **Heat Shrink Tubing** (for cable management)
 
@@ -44,8 +48,8 @@ A Raspberry Pi-based clock with GPS time synchronization and weather display usi
 
 1. **Clone Repository**: 
    ```bash
-   git clone https://github.com/jkeychan/rpi-clock.git
-   cd rpi-clock
+   git clone https://github.com/jkeychan/RPI-Clock.git
+   cd RPI-Clock
    ```
 
 2. **Run Automated Setup**: 
@@ -659,7 +663,7 @@ sudo systemctl daemon-reload
 
 # Optional: Remove dependencies (be careful if other projects use them)
 # sudo apt remove gpsd gpsd-clients chrony
-# pip3 uninstall adafruit-circuitpython-ht16k33 requests configparser ntplib
+# pip3 uninstall adafruit-circuitpython-ht16k33 requests ntplib
 ```
 
 ## Future Enhancements
@@ -675,9 +679,5 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 ## Contributing
 
 Contributions are welcome! Please feel free to submit pull requests or open issues for bugs and feature requests.
-
-
-
-
 
 
