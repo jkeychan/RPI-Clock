@@ -468,7 +468,7 @@ humidity_display = 2
 
 [CustomText]
 enabled = true
-text = WART 95.5 FM
+text = HELLO WORLD
 interval_minutes = 15
 display_duration = 3
 ```
