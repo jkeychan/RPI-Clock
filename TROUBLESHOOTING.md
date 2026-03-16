@@ -433,5 +433,5 @@ ping -c 3 openweathermap.org
 curl "http://api.openweathermap.org/data/2.5/weather?zip=90210&appid=YOUR_API_KEY"
 
 # Configuration Validation
-python3 /opt/rpi-clock/clock.py --help  # Shows configuration validation errors
+python3 /opt/rpi-clock/clock.py  # Runs startup config validation and exits with errors if misconfigured
 ```

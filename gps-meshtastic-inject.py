@@ -32,12 +32,21 @@ iface: Optional["SerialInterface"] = None
 
 
 def signal_handler(sig: int, frame: Optional[types.FrameType]) -> None:
+    """Handle SIGINT/SIGTERM by stopping the main loop and exiting cleanly."""
     global running
     running = False
     sys.exit(0)
 
 
 def connect_radio() -> Optional["SerialInterface"]:
+    """Open a serial connection to the Meshtastic radio on MESHTASTIC_PORT.
+
+    The meshtastic import is deferred to avoid startup failure when the
+    library is not installed or the device is not connected.
+
+    Returns:
+        SerialInterface if connection succeeded, None otherwise.
+    """
     import meshtastic.serial_interface
 
     try:
@@ -52,6 +61,20 @@ def connect_radio() -> Optional["SerialInterface"]:
 def inject_position(
     radio: "SerialInterface", lat: float, lon: float, alt: float
 ) -> bool:
+    """Inject a fixed GPS position into the Meshtastic radio node.
+
+    Uses setFixedPosition so the radio broadcasts this location over the mesh
+    rather than relying on its own (absent) GPS receiver.
+
+    Args:
+        radio: Connected SerialInterface to the Meshtastic radio.
+        lat: Latitude in decimal degrees.
+        lon: Longitude in decimal degrees.
+        alt: Altitude in metres above mean sea level (MSL).
+
+    Returns:
+        True if position was injected successfully, False otherwise.
+    """
     try:
         radio.localNode.setFixedPosition(lat, lon, int(alt))
         print(f"✓ Position injected: {lat:.6f}, {lon:.6f}, " f"alt={int(alt)}m MSL")

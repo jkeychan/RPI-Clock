@@ -659,7 +659,7 @@ fi
 
 if [[ "$SERVICES_NEED_START" == "true" ]] || [[ "$SKIP_PACKAGES" == "false" ]]; then
     echo ""
-    echo -e "${CYAN}Step 10: Starting services...${NC}"
+    echo -e "${CYAN}Step 12: Starting services...${NC}"
 
     # Start GPS daemon (idempotent)
     if ! systemctl is-active --quiet gpsd.service; then
@@ -681,7 +681,7 @@ else
 fi
 
 echo ""
-echo "Step 11: Validating installation..."
+echo "Step 13: Validating installation..."
 
 # Validate GPS daemon is running
 if systemctl is-active --quiet gpsd.service; then

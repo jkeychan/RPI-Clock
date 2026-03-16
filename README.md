@@ -249,11 +249,11 @@ After enabling UART and disabling Bluetooth, verify the GPS HAT is detected:
    ```
    You should see `/dev/ttyAMA0` if the GPS HAT is properly connected.
 
-2. **Check I2C Detection**:
+2. **Check I2C Detection** (verifies the 7-segment display, not the GPS HAT):
    ```bash
    sudo i2cdetect -y 1
    ```
-   You should see a device at address `70` (GPS HAT I2C interface).
+   You should see a device at address `70` (7-segment display backpack). The GPS HAT uses UART, not I2C.
 
 3. **Test GPS Connection**:
    ```bash
@@ -313,8 +313,11 @@ sudo apt update
 # Install Python package manager
 sudo apt install python3-pip
 
-# Install required Python packages
-pip3 install --break-system-packages adafruit-circuitpython-ht16k33 requests ntplib
+# Install system Python packages via apt (preferred on Raspberry Pi OS)
+sudo apt install python3-requests python3-ntplib python3-venv
+
+# Install Adafruit packages via pip (not available in apt)
+pip3 install --user adafruit-blinka adafruit-circuitpython-ht16k33
 
 # Install GPS daemon and clients
 sudo apt install gpsd gpsd-clients
@@ -323,15 +326,13 @@ sudo apt install gpsd gpsd-clients
 sudo apt install chrony
 ```
 
-**Note**: On newer Debian/Ubuntu systems, you may encounter an "externally managed environment" error. The setup script handles this automatically with the `--break-system-packages` flag.
-
 ### Development Tools
 
 The setup script also installs development tools for code quality:
 
 ```bash
-# Install Python development tools
-pip3 install --user flake8
+# Install Python linter
+pip3 install --user ruff
 
 # Install shellcheck for bash script validation
 sudo apt install shellcheck
@@ -347,7 +348,7 @@ sudo apt install shellcheck
 
 2. **Start gpsd Manually**:
    ```bash
-   sudo gpsd /dev/serial0 -F /var/run/gpsd.sock
+   sudo gpsd -N -n /dev/ttyAMA0 /dev/pps0
    ```
 
 3. **Test GPS Connection**:
@@ -449,6 +450,8 @@ zip_code = your_zip_code_here
 [Display]
 time_format = 24
 temp_unit = F
+smooth_scroll = false
+brightness = 0.8
 
 [NTP]
 preferred_server = 127.0.0.1

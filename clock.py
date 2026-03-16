@@ -494,7 +494,12 @@ def build_temp_string(temp: float, unit: str) -> str:
 
 
 def display_temperature(temp: float, unit: str) -> None:
-    """Display temperature on the 7-segment display."""
+    """Display temperature on the 7-segment display.
+
+    Args:
+        temp: Temperature value (float; will be truncated to int for display).
+        unit: Temperature unit string, e.g. 'C' or 'F'.
+    """
     if not display:
         return
     write_display(build_temp_string(temp, unit)[:4].rjust(4))
