@@ -46,11 +46,11 @@ if [[ -f /etc/chrony/chrony.conf ]]; then
         echo "✓ GPS reference clock configured"
     else
         echo "✗ GPS reference clock NOT configured"
-        echo "  Check chrony.conf for 'refclock SHM 0'"
+        echo "  Check chrony.conf for 'refclock SHM 2'"
     fi
-    
-    # Check for upstream servers
-    if grep -q "server.*pool.ntp.org" /etc/chrony/chrony.conf; then
+
+    # Check for upstream servers (project uses clock1.unc.edu and ntp.se)
+    if grep -q "^server" /etc/chrony/chrony.conf; then
         echo "✓ Upstream NTP servers configured"
     else
         echo "✗ Upstream NTP servers NOT configured"
