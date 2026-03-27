@@ -54,6 +54,10 @@ command_exists() {
 
 # Function to prompt for user input
 prompt_yes_no() {
+    if [[ "$INTERACTIVE" == "false" ]]; then
+        echo "$1 (y/n): y  [non-interactive: defaulting to yes]"
+        return 0
+    fi
     while true; do
         read -r -p "$1 (y/n): " yn
         case $yn in
