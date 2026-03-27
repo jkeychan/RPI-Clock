@@ -12,7 +12,7 @@ fail() { echo "FAIL: $1"; ((FAIL++)); }
 
 # ── Test 1: --help exits 0 and prints usage
 test_help_flag() {
-    output=$(timeout 2 bash "$SETUP" --help 2>&1 || true)
+    output=$(timeout 2 bash "$SETUP" --help 2>&1)
     status=$?
     if [[ $status -eq 0 ]] && echo "$output" | grep -q "\-\-reboot"; then
         pass "--help exits 0 and mentions --reboot"
@@ -23,7 +23,7 @@ test_help_flag() {
 
 # ── Test 2: unknown flag exits 1
 test_unknown_flag() {
-    output=$(timeout 2 bash "$SETUP" --unknown-flag 2>&1 || true)
+    output=$(timeout 2 bash "$SETUP" --unknown-flag 2>&1)
     status=$?
     if [[ $status -eq 1 ]]; then
         pass "unknown flag exits 1"
