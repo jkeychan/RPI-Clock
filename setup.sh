@@ -810,19 +810,21 @@ if [[ "$REBOOT_NEEDED" == "true" ]]; then
     echo -e "${WHITE}-${NC} The 7-segment display should show the current time"
     echo -e "${WHITE}-${NC} GPS time synchronization will be available"
     echo ""
-    if prompt_yes_no "Do you want to reboot now to activate all changes?"; then
-        echo -e "${YELLOW}Rebooting in 5 seconds...${NC}"
+    if [[ "$AUTO_REBOOT" == "true" ]]; then
+        echo -e "${YELLOW}Rebooting in 5 seconds... (--reboot flag set)${NC}"
         sleep 5
         sudo reboot
     else
         echo ""
-        echo -e "${YELLOW}Manual reboot required:${NC}"
-        echo -e "${GREEN}sudo reboot${NC}"
+        echo -e "${YELLOW}A reboot is required to activate hardware changes (UART, PPS overlay, Bluetooth disable).${NC}"
+        echo -e "${WHITE}Run:${NC} ${GREEN}sudo reboot${NC}"
         echo ""
         echo -e "${GREEN}After reboot:${NC}"
         echo -e "${WHITE}-${NC} GPS HAT will be available on ${GREEN}/dev/ttyAMA0${NC}"
         echo -e "${WHITE}-${NC} The 7-segment display should show the current time"
         echo -e "${WHITE}-${NC} If the display is blank, check the troubleshooting guide in ${BLUE}README.md${NC}"
+        echo ""
+        echo -e "${CYAN}Tip: re-run setup.sh with --reboot to reboot automatically next time.${NC}"
     fi
 else
     echo ""
