@@ -10,16 +10,6 @@ SETUP="$(cd "$(dirname "$0")/.." && pwd)/setup.sh"
 pass() { echo "PASS: $1"; ((PASS++)); }
 fail() { echo "FAIL: $1"; ((FAIL++)); }
 
-# ── Helper: source only the flag-parsing block and prompt_yes_no from setup.sh
-# We stub out set -e and skip everything after the function definitions.
-load_functions() {
-    # Pull out the flag-parsing block and prompt_yes_no, evaluate in a subshell
-    # The flag block starts after "# Check if running as root" block (line ~29)
-    # and prompt_yes_no is defined at line ~36.
-    # We drive this by feeding arguments directly rather than sourcing the whole script.
-    true
-}
-
 # ── Test 1: --help exits 0 and prints usage
 test_help_flag() {
     output=$(timeout 2 bash "$SETUP" --help 2>&1 || true)
