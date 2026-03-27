@@ -27,6 +27,26 @@ if [[ $EUID -eq 0 ]]; then
    exit 1
 fi
 
+# Non-interactive mode: auto-detect TTY or set via flags
+INTERACTIVE=true
+AUTO_REBOOT=false
+
+[ -t 0 ] || INTERACTIVE=false
+
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        -y|--yes|--non-interactive) INTERACTIVE=false ;;
+        --reboot)                   AUTO_REBOOT=true ;;
+        -h|--help)
+            echo "Usage: setup.sh [-y|--yes] [--reboot]"
+            echo "  -y, --yes     Skip confirmation prompts (non-interactive mode)"
+            echo "  --reboot      Auto-reboot at end if hardware config changes require it"
+            exit 0 ;;
+        *) echo "Unknown option: $1"; exit 1 ;;
+    esac
+    shift
+done
+
 # Function to check if command exists
 command_exists() {
     command -v "$1" >/dev/null 2>&1
