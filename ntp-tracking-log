@@ -1,0 +1,192 @@
+#!/usr/bin/env python3
+"""
+NTP tracking logger - structured JSONL for NTP Pool score correlation.
+Logs chrony state, PPS/GPS offsets, GPS quality, network latency, CPU temp every run.
+Output: /var/log/ntp-tracking/tracking.jsonl (one JSON object per line)
+"""
+
+import json
+import re
+import subprocess
+import time
+import urllib.request
+from datetime import datetime, timezone
+from pathlib import Path
+
+LOG_FILE    = Path("/var/log/ntp-tracking/tracking.jsonl")
+SCORE_CACHE = Path("/var/log/ntp-tracking/.score_cache.json")
+NTP_POOL_IP = "67.218.212.16"
+SCORE_INTERVAL = 600  # fetch NTP Pool score at most every 10 minutes
+
+PING_HOSTS = {
+    "gw":   "10.0.0.1",
+    "ntp1": "clock1.unc.edu",
+    "ntp2": "ntp.se",
+}
+
+
+def run(cmd):
+    try:
+        r = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
+        return r.stdout
+    except Exception:
+        return ""
+
+
+def parse_tracking():
+    out = run(["chronyc", "tracking"])
+    result = {}
+    patterns = {
+        "ref":        r"Reference ID\s*:.*\((.+?)\)",
+        "stratum":    r"Stratum\s*:\s*(\d+)",
+        "sys_offset": r"System time\s*:\s*([\d.e+\-]+) seconds (fast|slow)",
+        "last_offset":r"Last offset\s*:\s*([+\-]?[\d.e+\-]+) seconds",
+        "rms_offset": r"RMS offset\s*:\s*([\d.e+\-]+) seconds",
+        "freq_ppm":   r"Frequency\s*:\s*([+\-]?[\d.]+) ppm",
+        "skew_ppm":   r"Skew\s*:\s*([\d.]+) ppm",
+        "root_delay": r"Root delay\s*:\s*([\d.e+\-]+) seconds",
+        "root_disp":  r"Root dispersion\s*:\s*([\d.e+\-]+) seconds",
+        "update_iv":  r"Update interval\s*:\s*([\d.]+) seconds",
+        "leap":       r"Leap status\s*:\s*(.+)",
+    }
+    for key, pat in patterns.items():
+        m = re.search(pat, out)
+        if not m:
+            result[key] = None
+            continue
+        if key == "ref":
+            result[key] = m.group(1).strip()
+        elif key == "sys_offset":
+            val = float(m.group(1))
+            result["sys_offset_ns"] = round(val * 1e9 * (1 if m.group(2) == "fast" else -1))
+        elif key in ("last_offset", "freq_ppm"):
+            result[key] = float(m.group(1))
+        elif key in ("rms_offset", "root_delay", "root_disp"):
+            result[key + "_us"] = round(float(m.group(1)) * 1e6, 4)
+        elif key == "stratum":
+            result[key] = int(m.group(1))
+        elif key == "update_iv":
+            result["update_iv_s"] = float(m.group(1))
+        elif key == "skew_ppm":
+            result[key] = float(m.group(1))
+        else:
+            result[key] = m.group(1).strip()
+    return result
+
+
+def parse_sources():
+    out = run(["chronyc", "sources"])
+    pps_offset = None
+    gps_offset = None
+    unit_to_ns  = {"ns": 1,    "us": 1e3,  "ms": 1e6,  "s": 1e9}
+    unit_to_ms  = {"ns": 1e-6, "us": 1e-3, "ms": 1,    "s": 1e3}
+    pat = r"([+\-]?\d+(?:\.\d+)?)(ns|us|ms|s)\["
+    for line in out.splitlines():
+        if line.startswith("#") and "PPS" in line:
+            m = re.search(pat, line)
+            if m:
+                pps_offset = round(float(m.group(1)) * unit_to_ns[m.group(2)])
+        if line.startswith("#") and "GPS" in line:
+            m = re.search(pat, line)
+            if m:
+                gps_offset = round(float(m.group(1)) * unit_to_ms[m.group(2)], 3)
+    return {"pps_offset_ns": pps_offset, "gps_offset_ms": gps_offset}
+
+
+def parse_gps_quality():
+    """Read SKY + TPV messages from gpsd and return reception stats."""
+    result = {"gps_hdop": None, "gps_tdop": None, "gps_sats": None, "gps_fix": None}
+    try:
+        r = subprocess.run(
+            ["gpspipe", "-w", "-n", "20"],
+            capture_output=True, text=True, timeout=10
+        )
+        sky_done = tpv_done = False
+        for line in r.stdout.splitlines():
+            try:
+                d = json.loads(line.strip())
+            except Exception:
+                continue
+            if d.get("class") == "SKY" and not sky_done:
+                result["gps_hdop"] = d.get("hdop")
+                result["gps_tdop"] = d.get("tdop")
+                result["gps_sats"] = d.get("uSat")
+                sky_done = True
+            elif d.get("class") == "TPV" and not tpv_done:
+                result["gps_fix"] = d.get("mode")  # 1=no fix, 2=2D, 3=3D
+                tpv_done = True
+            if sky_done and tpv_done:
+                break
+    except Exception:
+        pass
+    return result
+
+
+def ping_ms(host):
+    out = run(["ping", "-c", "3", "-W", "1", "-q", host])
+    m = re.search(r"rtt min/avg/max/mdev = [\d.]+/([\d.]+)/", out)
+    return round(float(m.group(1)), 2) if m else None
+
+
+def cpu_temp():
+    try:
+        raw = Path("/sys/class/thermal/thermal_zone0/temp").read_text().strip()
+        return round(int(raw) / 1000, 1)
+    except Exception:
+        return None
+
+
+def pps_jitter_ns():
+    try:
+        r = subprocess.run(
+            ["timeout", "3", "ppstest", "/dev/pps0"],
+            capture_output=True, text=True
+        )
+        asserts = re.findall(r"assert ([\d.]+),", r.stdout + r.stderr)
+        if len(asserts) >= 2:
+            diffs = [abs(float(asserts[i+1]) - float(asserts[i]) - 1.0)
+                     for i in range(len(asserts) - 1)]
+            return round(sum(diffs) / len(diffs) * 1e9, 1)
+    except Exception:
+        pass
+    return None
+
+
+def ntppool_score():
+    now = time.time()
+    if SCORE_CACHE.exists():
+        try:
+            cached = json.loads(SCORE_CACHE.read_text())
+            if now - cached.get("fetched_at", 0) < SCORE_INTERVAL:
+                return cached.get("score")
+        except Exception:
+            pass
+    try:
+        url = f"https://www.ntppool.org/scores/{NTP_POOL_IP}/json?limit=1&monitor=24"
+        with urllib.request.urlopen(url, timeout=8) as resp:
+            data = json.loads(resp.read())
+        score = round(data["monitors"][0]["score"], 4)
+        SCORE_CACHE.write_text(json.dumps({"fetched_at": now, "score": score}))
+        return score
+    except Exception:
+        return None
+
+
+def main():
+    record = {"ts": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")}
+    record.update(parse_tracking())
+    record.update(parse_sources())
+    record.update(parse_gps_quality())
+    record["temp_c"] = cpu_temp()
+    for name, host in PING_HOSTS.items():
+        record[f"ping_{name}_ms"] = ping_ms(host)
+    record["pps_jitter_ns"] = pps_jitter_ns()
+    record["ntppool_score"] = ntppool_score()
+
+    LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
+    with LOG_FILE.open("a") as f:
+        f.write(json.dumps(record) + "\n")
+
+
+if __name__ == "__main__":
+    main()

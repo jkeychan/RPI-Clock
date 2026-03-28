@@ -1,0 +1,36 @@
+#!/usr/bin/env python3
+"""Show recent NTP tracking log entries in a readable table."""
+import json
+import sys
+from pathlib import Path
+
+LOG = Path("/var/log/ntp-tracking/tracking.jsonl")
+n = int(sys.argv[1]) if len(sys.argv) > 1 else 20
+
+FIX = {1: "none", 2: "2D", 3: "3D"}
+
+lines = LOG.read_text().splitlines()[-n:]
+print("%-20s  %9s  %9s  %9s  %8s  %6s  %7s  %5s  %5s  %3s  %4s  %7s  %s"
+      % ("TIME", "SYS_ns", "RMS_us", "PPS_ns", "JIT_ns", "TEMP", "GW_ms",
+         "HDOP", "TDOP", "SAT", "FIX", "SCORE", "REF"))
+for line in lines:
+    d = json.loads(line)
+    so     = d.get("sys_offset_ns") or 0
+    rms    = d.get("rms_offset_us") or 0
+    pps    = d.get("pps_offset_ns") or 0
+    j      = d.get("pps_jitter_ns") or 0
+    temp   = d.get("temp_c", "?")
+    gw     = d.get("ping_gw_ms", "?")
+    hdop   = d.get("gps_hdop")
+    tdop   = d.get("gps_tdop")
+    sats   = d.get("gps_sats")
+    fix    = FIX.get(d.get("gps_fix"), "?")
+    ref    = d.get("ref", "?")
+    score  = d.get("ntppool_score")
+    hdop_s  = "%5.2f" % hdop  if hdop  is not None else "    ?"
+    tdop_s  = "%5.1f" % tdop  if tdop  is not None else "    ?"
+    sats_s  = "%3d"   % sats  if sats  is not None else "  ?"
+    score_s = "%7.2f" % score if score is not None else "      ?"
+    print("%-20s  %+9d  %9.1f  %+9d  %8.1f  %6s  %7s  %s  %s  %s  %4s  %s  %s"
+          % (d["ts"], so, rms, pps, j, temp, gw,
+             hdop_s, tdop_s, sats_s, fix, score_s, ref))
