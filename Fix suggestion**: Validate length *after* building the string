@@ -1,0 +1,9 @@
+def display_temperature(temp: float, unit: str) -> None:
+    """Display temperature on the 7-segment display."""
+    if not display:
+        return
+    temp_str = build_temp_string(temp, unit)
+    # Ensure we don't exceed 4 characters
+    if len(temp_str) > 4:
+        temp_str = temp_str[:4]
+    write_display(temp_str.rjust(4))

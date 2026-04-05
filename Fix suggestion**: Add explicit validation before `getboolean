@@ -1,0 +1,4 @@
+smooth_scroll_raw = config.get("Display", "smooth_scroll", fallback="").strip().lower()
+if smooth_scroll_raw not in ("true", "false"):
+    errors.append("smooth_scroll must be 'true' or 'false'")
+SMOOTH_SCROLL = config.getboolean("Display", "smooth_scroll")

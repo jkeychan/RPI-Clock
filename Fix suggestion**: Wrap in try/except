@@ -1,0 +1,12 @@
+def write_display(text: str) -> None:
+    """Write text to display only if it changed."""
+    global last_display_text
+    if not display:
+        return
+    if text != last_display_text:
+        try:
+            display.print(text)
+            display.show()
+            last_display_text = text
+        except Exception as e:
+            print(f"✗ Display write error: {e}")

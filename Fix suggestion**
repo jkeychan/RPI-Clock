@@ -1,0 +1,9 @@
+def build_temp_string(temp: float, unit: str) -> str:
+    """Create temperature string without truncation for scrolling."""
+    if temp < 0:
+        # Handle -0.5 → "0C" instead of "-0C"
+        abs_temp = abs(temp)
+        if abs_temp < 1.0:
+            return f"0{unit}"  # or "-0{unit}" if you want to preserve sign
+        return f"-{int(abs_temp)}{unit}"
+    return f"{int(temp)}{unit}"

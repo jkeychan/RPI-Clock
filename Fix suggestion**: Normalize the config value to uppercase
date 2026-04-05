@@ -1,0 +1,3 @@
+temp_unit = config.get("Display", "temp_unit", fallback="").strip().upper()
+if temp_unit not in ["C", "F"]:
+    errors.append("temp_unit must be 'C' or 'F'")
