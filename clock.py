@@ -103,13 +103,14 @@ def validate_config() -> bool:
         if time_format not in ["12", "24"]:
             errors.append("time_format must be '12' or '24'")
 
-        temp_unit = config.get("Display", "temp_unit", fallback="")
+        temp_unit = config.get("Display", "temp_unit", fallback="").strip().upper()
         if temp_unit not in ["C", "F"]:
             errors.append("temp_unit must be 'C' or 'F'")
 
-        smooth_scroll = config.get("Display", "smooth_scroll", fallback="")
-        if smooth_scroll.lower() not in ["true", "false"]:
+        smooth_scroll_raw = config.get("Display", "smooth_scroll", fallback="").strip().lower()
+        if smooth_scroll_raw not in ("true", "false"):
             errors.append("smooth_scroll must be 'true' or 'false'")
+        SMOOTH_SCROLL = config.getboolean("Display", "smooth_scroll")
 
         brightness = config.get("Display", "brightness", fallback="")
         try:
@@ -473,9 +474,12 @@ def write_display(text: str) -> None:
     if not display:
         return
     if text != last_display_text:
-        display.print(text)
-        display.show()
-        last_display_text = text
+        try:
+            display.print(text)
+            display.show()
+            last_display_text = text
+        except Exception as e:
+            print(f"✗ Display write error: {e}")
 
 
 def build_temp_string(temp: float, unit: str) -> str:
@@ -489,7 +493,10 @@ def build_temp_string(temp: float, unit: str) -> str:
         str: Formatted temperature string
     """
     if temp < 0:
-        return f"-{int(abs(temp))}{unit}"
+        abs_temp = abs(temp)
+        if abs_temp < 1.0:
+            return f"0{unit}"
+        return f"-{int(abs_temp)}{unit}"
     return f"{int(temp)}{unit}"
 
 
@@ -502,7 +509,11 @@ def display_temperature(temp: float, unit: str) -> None:
     """
     if not display:
         return
-    write_display(build_temp_string(temp, unit)[:4].rjust(4))
+    temp_str = build_temp_string(temp, unit)
+    # Ensure we don't exceed 4 characters
+    if len(temp_str) > 4:
+        temp_str = temp_str[:4]
+    write_display(temp_str.rjust(4))
 
 
 def display_time() -> None:
@@ -583,7 +594,12 @@ def fetch_weather() -> Optional[Tuple[float, float, int]]:
             main_data = weather_data["main"]
             temperature: float = float(main_data["temp"])
             feels_like: float = float(main_data["feels_like"])
-            humidity: int = int(round(main_data["humidity"]))
+            
+            humidity_raw = main_data.get("humidity")
+            if humidity_raw is None:
+                print("✗ Weather data missing humidity field")
+                return None
+            humidity: int = int(round(humidity_raw))
 
             # Convert units if needed
             if TEMP_UNIT == "F":
@@ -638,7 +654,7 @@ def get_current_time() -> time.struct_time:
     """
     try:
         if ntp_client:
-            response = ntp_client.request(PREFERRED_NTP_SERVER, version=3, timeout=5)
+            response = ntp_client.request(PREFERRED_NTP_SERVER, version=4, timeout=5)
             return time.localtime(response.tx_time)
     except ntplib.NTPException as e:
         print(f"✗ NTP synchronization failed: {e}")
@@ -686,7 +702,8 @@ def display_custom_text() -> None:
     if SMOOTH_SCROLL:
         # Use smooth scrolling with marquee
         display.fill(0)
-        display.marquee(CUSTOM_TEXT, delay=SCROLL_DELAY, loop=False)
+        text_to_display = CUSTOM_TEXT[:20]  # Hard limit for display
+        display.marquee(text_to_display, delay=SCROLL_DELAY, loop=False)
     else:
         # Use static display for the configured duration
         write_display(CUSTOM_TEXT[:4])  # Show first 4 characters
