@@ -3,6 +3,8 @@
 # I2C Display Diagnostic Script
 # This script helps diagnose I2C display connection issues
 
+set -euo pipefail
+
 echo "RPI-Clock I2C Diagnostic Script"
 echo "==============================="
 echo ""
@@ -72,9 +74,16 @@ echo "-----------------------------------"
 if groups | grep -q i2c; then
     echo "✓ User is in i2c group"
 else
-    echo "✗ User is NOT in i2c group"
-    echo "  Run: sudo usermod -a -G i2c $USER"
-    echo "  Then logout and login again"
+    # Check if i2c group exists before suggesting to add user
+    if getent group i2c >/dev/null 2>&1; then
+        echo "✗ User is NOT in i2c group"
+        echo "  Run: sudo usermod -a -G i2c $USER"
+        echo "  Then logout and login again"
+    else
+        echo "⚠ i2c group does not exist"
+        echo "  This might indicate I2C tools are not properly installed"
+        echo "  Run: sudo apt install i2c-tools"
+    fi
 fi
 
 echo ""
