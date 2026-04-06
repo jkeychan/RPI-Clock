@@ -1,6 +1,0 @@
-text_to_display = CUSTOM_TEXT[:20]  # Hard limit for display
-if SMOOTH_SCROLL:
-    display.fill(0)
-    display.marquee(text_to_display, delay=SCROLL_DELAY, loop=False)
-else:
-    write_display(text_to_display[:4])

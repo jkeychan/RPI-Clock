@@ -1,5 +1,0 @@
-humidity_raw = main_data.get("humidity")
-if humidity_raw is None:
-    print("✗ Weather data missing humidity field")
-    return None
-humidity: int = int(round(humidity_raw))

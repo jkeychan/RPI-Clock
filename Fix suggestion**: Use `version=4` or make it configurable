@@ -1,1 +1,0 @@
-response = ntp_client.request(PREFERRED_NTP_SERVER, version=4, timeout=5)
