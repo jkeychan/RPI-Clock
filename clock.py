@@ -26,7 +26,6 @@ os.chdir("/tmp")
 
 
 # Constants - avoid repeated lookups
-API_REFRESH_CYCLES: int = 10
 API_ENDPOINT: str = "https://api.openweathermap.org/data/2.5/weather"
 CONFIG_FILE: str = "/opt/rpi-clock/config.ini"
 
@@ -34,7 +33,7 @@ CONFIG_FILE: str = "/opt/rpi-clock/config.ini"
 config: configparser.ConfigParser = configparser.ConfigParser()
 config.read_dict(
     {
-        "Weather": {"api_key": "your_api_key_here", "zip_code": "your_zip_code_here"},
+        "Weather": {"api_key": "your_api_key_here", "zip_code": "your_zip_code_here", "refresh_minutes": "15"},
         "Display": {
             "time_format": "12",
             "temp_unit": "C",
@@ -96,6 +95,13 @@ def validate_config() -> bool:
             errors.append("ZIP code not configured - please edit config.ini")
         elif not zip_code.isdigit() or len(zip_code) != 5:
             errors.append("ZIP code must be 5 digits")
+
+        try:
+            refresh = config.getint("Weather", "refresh_minutes")
+            if refresh < 5 or refresh > 1440:
+                errors.append("Weather refresh_minutes must be between 5 and 1440")
+        except (ValueError, TypeError):
+            errors.append("Weather refresh_minutes must be a valid integer")
 
     # Validate Display section
     if config.has_section("Display"):
@@ -202,6 +208,7 @@ CUSTOM_TEXT: str = config.get("CustomText", "text", fallback="")
 CUSTOM_TEXT_INTERVAL: int = config.getint("CustomText", "interval_minutes")
 CUSTOM_TEXT_DURATION: int = config.getint("CustomText", "display_duration")
 CUSTOM_TEXT_INTERVAL_SECONDS: int = CUSTOM_TEXT_INTERVAL * 60
+WEATHER_REFRESH_SECS: int = config.getint("Weather", "refresh_minutes") * 60
 
 # Pre-compute conversion factor
 C_TO_F_FACTOR: float = 9 / 5  # Avoid repeated division
@@ -743,7 +750,7 @@ def should_display_custom_text() -> bool:
 
 def main_loop() -> None:
     """Optimized main loop with reduced function calls."""
-    cycle_counter = 0
+    last_weather_fetch: float = 0.0
     global cached_weather_info
 
     if not display:
@@ -785,9 +792,11 @@ def main_loop() -> None:
             if should_display_custom_text():
                 display_custom_text()
 
-            # Weather display - only fetch when needed
-            if cycle_counter == 0 or cached_weather_info is None:
+            # Weather display - fetch on first run or after refresh interval
+            now_mono = time.monotonic()
+            if cached_weather_info is None or (now_mono - last_weather_fetch) >= WEATHER_REFRESH_SECS:
                 cached_weather_info = fetch_weather()
+                last_weather_fetch = now_mono
 
             if cached_weather_info:
                 temperature, feels_like, humidity = cached_weather_info
@@ -825,7 +834,6 @@ def main_loop() -> None:
                     display_humidity(humidity)
                     time.sleep(HUMIDITY_DISPLAY)
 
-            cycle_counter = (cycle_counter + 1) % API_REFRESH_CYCLES
 
         except KeyboardInterrupt:
             print("\nReceived interrupt signal - shutting down gracefully")
